@@ -966,4 +966,939 @@ CONVERSIONE COMPLETATA!
 
 ---
 
-## Fine Spiegazione Prime 3 Celle
+## Cella 4: Ricerca e Caricamento CSV (Esplorazione Directory)
+
+Questa cella diagnostica esplora la struttura delle directory per localizzare i file CSV appena creati. È una fase di debugging/verifica.
+
+### Codice Completo
+
+```python
+1  # Verifica la struttura delle directory e trova i file CSV
+2  import os
+3  from pathlib import Path
+4  
+5  print("Current working directory:", os.getcwd())
+6  print("\nFile nel notebook directory (src/):")
+7  if os.path.exists('.'):
+8      for item in os.listdir('.'):
+9          print(f"  - {item}")
+10 
+11 print("\nFile nella directory parent:")
+12 parent_dir = Path('..').resolve()
+13 if parent_dir.exists():
+14     for item in os.listdir(parent_dir):
+15         print(f"  - {item}")
+16 
+17 # Cerca i file CSV
+18 print("\n" + "="*60)
+19 print("Ricerca file CSV...")
+20 print("="*60)
+21 for root, dirs, files in os.walk('..'):
+22     for file in files:
+23         if file.endswith('.csv'):
+24             full_path = os.path.join(root, file)
+25             print(f"Trovato: {full_path}")
+```
+
+### Spiegazione Dettagliata
+
+**Righe 1-3: Import**
+```python
+import os
+from pathlib import Path
+```
+- Re-import per sicurezza (potrebbe essere eseguita standalone)
+
+**Riga 5: Working Directory**
+```python
+print("Current working directory:", os.getcwd())
+```
+- **`os.getcwd()`**: Get Current Working Directory
+- Ritorna percorso assoluto della directory corrente
+- Nel progetto (eseguito da Jupyter):
+  ```
+  D:\...\DL-Project-...\src
+  ```
+- **Importante**: In Jupyter, CWD = directory del notebook (.ipynb)
+
+**Righe 6-9: Listare File Directory Corrente**
+```python
+print("\nFile nel notebook directory (src/):")
+if os.path.exists('.'):
+    for item in os.listdir('.'):
+        print(f"  - {item}")
+```
+
+**Riga 7: Check Esistenza**
+```python
+if os.path.exists('.'):
+```
+- **`.`**: Directory corrente (src/)
+- **`os.path.exists()`**: Verifica esistenza
+- **Sempre True** per `.`, ma buona pratica defensiva
+
+**Riga 8: Iterazione File**
+```python
+for item in os.listdir('.'):
+```
+- **`os.listdir('.')`**: Lista tutti i file/cartelle in directory corrente
+- Ritorna `list[str]` (solo nomi, non percorsi completi)
+- **Non ricorsivo**: solo primo livello
+- Nel progetto, output tipico:
+  ```
+  - PV_Forecasting_TFT.ipynb
+  - __pycache__
+  - .ipynb_checkpoints
+  ```
+
+**Righe 11-15: Listare Directory Parent**
+```python
+print("\nFile nella directory parent:")
+parent_dir = Path('..').resolve()
+if parent_dir.exists():
+    for item in os.listdir(parent_dir):
+        print(f"  - {item}")
+```
+
+**Riga 12**: 
+```python
+parent_dir = Path('..').resolve()
+```
+- **`Path('..')`**: Directory parent (project root)
+- **`.resolve()`**: Converte in percorso assoluto
+- Nel progetto: directory principale del repository
+
+**Riga 14**:
+```python
+for item in os.listdir(parent_dir):
+```
+- Lista file/cartelle nel project root
+- Output tipico:
+  ```
+  - data/
+  - src/
+  - README.md
+  - CHANGELOG_AND_FIXES.md
+  - DEVELOPMENT_LOG.md
+  - lightning_logs/
+  ```
+
+**Righe 17-25: Ricerca Ricorsiva CSV**
+```python
+print("\n" + "="*60)
+print("Ricerca file CSV...")
+print("="*60)
+for root, dirs, files in os.walk('..'):
+    for file in files:
+        if file.endswith('.csv'):
+            full_path = os.path.join(root, file)
+            print(f"Trovato: {full_path}")
+```
+
+**Riga 21 - Analisi dettagliata**:
+```python
+for root, dirs, files in os.walk('..'):
+```
+- **`os.walk()`**: Generatore per traversare albero directory ricorsivamente
+- **Parametro**: `'..'` = parte dal parent (project root)
+- **Ritorna 3-tuple ad ogni iterazione**:
+  - `root` (str): Path della directory corrente nell'iterazione
+  - `dirs` (list[str]): Nome delle sottodirectory in `root`
+  - `files` (list[str]): Nome dei file in `root`
+
+**Esempio Iterazione**:
+```python
+Iterazione 1:
+  root = 'D:\...\DL-Project-...'
+  dirs = ['data', 'src', 'lightning_logs']
+  files = ['README.md', 'CHANGELOG_AND_FIXES.md']
+
+Iterazione 2:
+  root = 'D:\...\DL-Project-...\data'
+  dirs = ['raw']
+  files = []
+
+Iterazione 3:
+  root = 'D:\...\DL-Project-...\data\raw'
+  dirs = []
+  files = ['pv_dataset - 07-10--06-11.csv', 'pv_dataset - 07-11--06-12.csv', ...]
+```
+
+**Riga 22-23**:
+```python
+for file in files:
+    if file.endswith('.csv'):
+```
+- Loop interno: itera su file nella directory corrente
+- **`file.endswith('.csv')`**: Filtra solo CSV
+- **Case-sensitive** su Linux (`.CSV` non matcherebbe)
+
+**Riga 24-25**:
+```python
+full_path = os.path.join(root, file)
+print(f"Trovato: {full_path}")
+```
+- **`os.path.join()`**: Combina path componenti
+  - Gestisce automaticamente separatori OS (`\` Windows, `/` Unix)
+  - Es: `os.path.join('data\\raw', 'file.csv')` → `'data\\raw\\file.csv'`
+- Stampa percorso completo per ogni CSV trovato
+
+### Output Esempio
+
+```
+Current working directory: D:\Cartelle\Cartelle nuove\Uni.Ingegneria\Magistrale UCBM\Deep Learning\DL-Project---24-Hour-Ahead-Power-Forecasting-with-Temporal-Fusion-Transformer-TFT-\src
+
+File nel notebook directory (src/):
+  - PV_Forecasting_TFT.ipynb
+  - __pycache__
+
+File nella directory parent:
+  - data
+  - src
+  - README.md
+  - CHANGELOG_AND_FIXES.md
+  - DEVELOPMENT_LOG.md
+  - lightning_logs
+
+============================================================
+Ricerca file CSV...
+============================================================
+Trovato: ..\data\raw\pv_dataset - 07-10--06-11.csv
+Trovato: ..\data\raw\pv_dataset - 07-11--06-12.csv
+Trovato: ..\data\raw\wx_dataset - 07-10--06-11.csv
+Trovato: ..\data\raw\wx_dataset - 07-11--06-12.csv
+```
+
+### Perché Questa Cella Esiste
+
+1. **Debugging**: Verifica che conversione Excel→CSV abbia funzionato
+2. **Path Discovery**: Trova automaticamente file senza hardcode path
+3. **Cross-Platform**: `os.walk()` funziona su Windows/Linux/Mac
+4. **Troubleshooting**: Aiuta utente se file non trovati
+
+---
+
+## Cella 5: Caricamento e Concatenazione Dati PV
+
+Questa cella carica i 2 file CSV PV, li concatena in un unico DataFrame, e identifica/rinomina le colonne target.
+
+### Codice Completo con Numerazione
+
+```python
+1  import os
+2  from pathlib import Path
+3  
+4  # Trova la directory root del progetto (una cartella sopra src/)
+5  project_root = Path('..').resolve()
+6  
+7  # Percorsi dei file - cerca prima nella directory data/, poi nella root
+8  def find_csv_file(filename):
+9      """Cerca il file CSV in diverse possibili location"""
+10     possible_paths = [
+11         project_root / 'data' / 'raw' / filename,
+12         project_root / 'data' / filename,
+13         project_root / filename,
+14         Path('.') / filename,
+15         Path('..') / filename
+16     ]
+17     
+18     for path in possible_paths:
+19         if path.exists():
+20             print(f"✓ Trovato: {path}")
+21             return str(path)
+22     
+23     print(f"✗ Non trovato: {filename}")
+24     print(f"  Percorsi cercati:")
+25     for p in possible_paths:
+26         print(f"    - {p}")
+27     return None
+28 
+29 print("Ricerca dei file CSV...\n")
+30 pv_file1 = find_csv_file("pv_dataset - 07-10--06-11.csv")
+31 pv_file2 = find_csv_file("pv_dataset - 07-11--06-12.csv")
+32 wx_file1 = find_csv_file("wx_dataset - 07-10--06-11.csv")
+33 wx_file2 = find_csv_file("wx_dataset - 07-11--06-12.csv")
+34 
+35 # Verifica che tutti i file siano stati trovati
+36 if not all([pv_file1, pv_file2, wx_file1, wx_file2]):
+37     print("\nATTENZIONE: Non tutti i file sono stati trovati!")
+38     print("\nAssicurati che i 4 file CSV siano nella directory del progetto.")
+39     print("Posizionali in una di queste location:")
+40     print(f"  - {project_root / 'data' / 'raw'}")
+41     print(f"  - {project_root / 'data'}")
+42     print(f"  - {project_root}")
+43     raise FileNotFoundError("File CSV non trovati")
+44 
+45 print("\n" + "="*60)
+46 print("Caricamento dati PV...")
+47 print("="*60)
+48 
+49 # Carica dati PV
+50 pv1 = pd.read_csv(pv_file1)
+51 pv2 = pd.read_csv(pv_file2)
+52 
+53 print(f"PV1 shape: {pv1.shape}")
+54 print(f"PV2 shape: {pv2.shape}")
+55 print(f"\nColonne PV1: {pv1.columns.tolist()}")
+56 
+57 # Concatena i dati PV
+58 pv_data = pd.concat([pv1, pv2], ignore_index=True)
+59 print(f"\nPV data concatenato: {pv_data.shape}")
+60 
+61 # Identifica la colonna timestamp e target
+62 # La colonna "Max kWp" contiene il timestamp
+63 # La prima colonna numerica (probabilmente "82.41" o simile) è la produzione
+64 timestamp_col = "Max kWp"
+65 target_col = [col for col in pv_data.columns if col != timestamp_col][0]
+66 
+67 print(f"\nColonna timestamp identificata: '{timestamp_col}'")
+68 print(f"Colonna target identificata: '{target_col}'")
+69 
+70 # Rinomina le colonne
+71 pv_data = pv_data.rename(columns={timestamp_col: 'datetime', target_col: 'power_kw'})
+72 print(f"\nPrime righe PV data:")
+73 print(pv_data.head())
+```
+
+### Spiegazione Dettagliata
+
+#### Sezione 1: Funzione find_csv_file (Righe 8-27)
+
+**Righe 8-9: Definizione e Docstring**
+```python
+def find_csv_file(filename):
+    """Cerca il file CSV in diverse possibili location"""
+```
+- **Scopo**: Ricerca robusta di file CSV in multiple location
+- **Parametro**: `filename` (str) - Nome file da cercare
+- **Return**: Path assoluto (str) o `None` se non trovato
+
+**Righe 10-16: Lista Percorsi Candidati**
+```python
+possible_paths = [
+    project_root / 'data' / 'raw' / filename,
+    project_root / 'data' / filename,
+    project_root / filename,
+    Path('.') / filename,
+    Path('..') / filename
+]
+```
+- **Lista ordinata** per priorità (data/raw prima)
+- **5 location** controllate sequenzialmente:
+
+1. **`project_root / 'data' / 'raw' / filename`**:
+   - Location ideale: `D:\...\DL-Project-...\data\raw\file.csv`
+   - Dove i CSV dovrebbero essere dopo conversione
+
+2. **`project_root / 'data' / filename`**:
+   - Fallback: file direttamente in data/ (no sottocartella raw/)
+   
+3. **`project_root / filename`**:
+   - File nel project root (semplificato)
+   
+4. **`Path('.') / filename`**:
+   - File nella directory corrente (src/)
+   
+5. **`Path('..') / filename`**:
+   - File nel parent (project root, percorso relativo)
+
+**Righe 18-21: Iterazione e Check Esistenza**
+```python
+for path in possible_paths:
+    if path.exists():
+        print(f"✓ Trovato: {path}")
+        return str(path)
+```
+
+**Riga 18**:
+```python
+for path in possible_paths:
+```
+- Itera sui 5 percorsi candidati in ordine
+
+**Riga 19**:
+```python
+if path.exists():
+```
+- **`.exists()`**: Metodo Path che verifica esistenza
+- Ritorna `True` se file/directory esiste
+- **Performance**: Controllare esistenza è fast (~microseconds)
+
+**Riga 20-21**:
+```python
+print(f"✓ Trovato: {path}")
+return str(path)
+```
+- **Early return**: Appena trovato, ritorna subito
+- **`str(path)`**: Converte `Path` object in stringa
+  - Necessario perché `pd.read_csv()` accetta str o Path
+  - Preferito str per compatibilità
+
+**Righe 23-27: Gestione File Non Trovato**
+```python
+print(f"✗ Non trovato: {filename}")
+print(f"  Percorsi cercati:")
+for p in possible_paths:
+    print(f"    - {p}")
+return None
+```
+- Eseguito solo se loop completa senza return
+- Stampa debug: mostra tutti i path controllati
+- **Return `None`**: Indica fallimento (checked dal chiamante)
+
+#### Sezione 2: Chiamate Funzione (Righe 29-43)
+
+**Righe 29-33: Ricerca 4 File**
+```python
+print("Ricerca dei file CSV...\n")
+pv_file1 = find_csv_file("pv_dataset - 07-10--06-11.csv")
+pv_file2 = find_csv_file("pv_dataset - 07-11--06-12.csv")
+wx_file1 = find_csv_file("wx_dataset - 07-10--06-11.csv")
+wx_file2 = find_csv_file("wx_dataset - 07-11--06-12.csv")
+```
+- 4 chiamate separate per ciascun CSV
+- **Variabili risultanti**:
+  - Tipo: `str` (path assoluto) o `None`
+  - Es. `pv_file1 = "D:\\...\\data\\raw\\pv_dataset - 07-10--06-11.csv"`
+
+**Righe 36-43: Validazione e Error Handling**
+```python
+if not all([pv_file1, pv_file2, wx_file1, wx_file2]):
+    print("\nATTENZIONE: Non tutti i file sono stati trovati!")
+    print("\nAssicurati che i 4 file CSV siano nella directory del progetto.")
+    print("Posizionali in una di queste location:")
+    print(f"  - {project_root / 'data' / 'raw'}")
+    print(f"  - {project_root / 'data'}")
+    print(f"  - {project_root}")
+    raise FileNotFoundError("File CSV non trovati")
+```
+
+**Riga 36 - Analisi dettagliata**:
+```python
+if not all([pv_file1, pv_file2, wx_file1, wx_file2]):
+```
+- **`all([...])`**: Funzione built-in che verifica tutti truthy
+- **`None` is falsy**: Se anche un solo file manca (=`None`), all() ritorna `False`
+- **`not all(...)`**: Inverti logica → True se almeno uno manca
+
+**Riga 43**:
+```python
+raise FileNotFoundError("File CSV non trovati")
+```
+- **`raise`**: Solleva eccezione (blocca esecuzione)
+- **`FileNotFoundError`**: Eccezione built-in per file mancanti
+- **Messaggio custom**: `"File CSV non trovati"`
+- **Effetto**: Jupyter mostra traceback rosso, notebook si ferma
+
+#### Sezione 3: Caricamento Dati PV (Righe 45-56)
+
+**Righe 49-51: Lettura CSV con Pandas**
+```python
+pv1 = pd.read_csv(pv_file1)
+pv2 = pd.read_csv(pv_file2)
+```
+
+**`pd.read_csv()` - Parametri Impliciti Default**:
+- **`sep=','`**: Separatore virgola (standard CSV)
+- **`header=0`**: Prima riga come nomi colonne
+- **`index_col=None`**: Nessuna colonna come index
+- **`dtype=None`**: Auto-detect tipi (int, float, str)
+- **`encoding='utf-8'`**: Encoding Unicode
+- **`parse_dates=False`**: NON converte date automaticamente (fatto dopo)
+
+**Nel progetto**:
+- `pv1`: DataFrame con 8760 righe × 2 colonne (1 anno di dati orari)
+- `pv2`: DataFrame con 8557 righe × 2 colonne (anno incompleto)
+- **Colonne originali**: `['Max kWp', '82.41']` (nomi strani dal file Excel)
+
+**Righe 53-55: Info Diagnostiche**
+```python
+print(f"PV1 shape: {pv1.shape}")
+print(f"PV2 shape: {pv2.shape}")
+print(f"\nColonne PV1: {pv1.columns.tolist()}")
+```
+- **`df.shape`**: Tupla `(n_rows, n_cols)`
+  - Es: `pv1.shape = (8760, 2)`
+- **`df.columns`**: Index object con nomi colonne
+- **`.tolist()`**: Converte Index → lista Python
+  - Es: `['Max kWp', '82.41']`
+
+#### Sezione 4: Concatenazione (Righe 57-59)
+
+**Riga 58: pd.concat() - Analisi Dettagliata**
+```python
+pv_data = pd.concat([pv1, pv2], ignore_index=True)
+```
+
+**`pd.concat()` - Parametri**:
+- **`[pv1, pv2]`**: Lista di DataFrame da concatenare
+- **`axis=0` (default)**: Concatenazione verticale (stack righe)
+  - `axis=1` concatenerebbe orizzontalmente (side-by-side)
+- **`ignore_index=True`**: **CRUCIALE**
+  - Reset dell'index dopo concatenazione
+  - Senza questo: index avrebbero duplicati (0-8759, poi di nuovo 0-8556)
+  - Con questo: index continuo (0-17316)
+
+**Visualizzazione Concatenazione**:
+```
+pv1:                      pv2:
+  Max kWp    | 82.41        Max kWp    | 82.41
+0 2010-07-01 | 0.0       0 2011-07-01 | 0.0
+1 2010-07-01 | 1.2       1 2011-07-01 | 0.8
+... (8760 rows)          ... (8557 rows)
+
+↓ pd.concat([pv1, pv2], ignore_index=True) ↓
+
+pv_data:
+     Max kWp    | 82.41
+0    2010-07-01 | 0.0
+1    2010-07-01 | 1.2
+...
+8759 2011-06-30 | 5.3
+8760 2011-07-01 | 0.0    ← Inizio pv2
+8761 2011-07-01 | 0.8
+...
+17316 2012-06-30 | 4.1
+```
+
+**Risultato**:
+- `pv_data.shape = (17317, 2)` (8760 + 8557 = 17317 righe)
+
+#### Sezione 5: Identificazione e Rinomina Colonne (Righe 61-73)
+
+**Righe 61-65: Identificazione Automatica Colonne**
+```python
+# Identifica la colonna timestamp e target
+# La colonna "Max kWp" contiene il timestamp
+# La prima colonna numerica (probabilmente "82.41" o simile) è la produzione
+timestamp_col = "Max kWp"
+target_col = [col for col in pv_data.columns if col != timestamp_col][0]
+```
+
+**Riga 64**:
+```python
+timestamp_col = "Max kWp"
+```
+- **Hardcoded**: Nome colonna timestamp noto dal file originale
+- **"Max kWp"**: Nome strano (probabilmente errore di labeling nel file Excel)
+- Contiene timestamp ISO: `"2010-07-01 00:00:00+00:00 UTC"`
+
+**Riga 65 - Analisi complessa**:
+```python
+target_col = [col for col in pv_data.columns if col != timestamp_col][0]
+```
+- **List comprehension**: Filtra colonne
+- **`pv_data.columns`**: Index(['Max kWp', '82.41'], dtype='object')
+- **`if col != timestamp_col`**: Esclude timestamp
+- **Risultato lista**: `['82.41']` (una sola colonna rimasta)
+- **`[0]`**: Prende primo (e unico) elemento
+- **`target_col = '82.41'`**: Nome della colonna target (produzione PV)
+
+**Perché questo approccio**:
+- Evita hardcode del nome target (potrebbe variare tra dataset)
+- Assumo: solo 2 colonne (1 timestamp + 1 target)
+- Robusto se nome target cambia
+
+**Righe 70-71: Rinomina Colonne**
+```python
+pv_data = pv_data.rename(columns={timestamp_col: 'datetime', target_col: 'power_kw'})
+```
+
+**`df.rename()` - Parametri**:
+- **`columns=dict`**: Dizionario di mapping old_name → new_name
+- **Mapping**:
+  - `"Max kWp"` → `"datetime"`
+  - `"82.41"` → `"power_kw"`
+- **`inplace=False` (default)**: Ritorna nuovo DataFrame (non modifica in-place)
+- **Riassegnazione**: `pv_data = ...` salva il risultato
+
+**Dopo rinomina**:
+```python
+pv_data.columns
+# Index(['datetime', 'power_kw'], dtype='object')
+```
+
+**Righe 72-73: Visualizzazione**
+```python
+print(f"\nPrime righe PV data:")
+print(pv_data.head())
+```
+- **`df.head()`**: Ritorna prime 5 righe (default n=5)
+- Output esempio:
+  ```
+              datetime  power_kw
+  0  2010-07-01 00:00:00+00:00 UTC     0.00
+  1  2010-07-01 01:00:00+00:00 UTC     0.00
+  2  2010-07-01 02:00:00+00:00 UTC     0.00
+  3  2010-07-01 03:00:00+00:00 UTC     0.00
+  4  2010-07-01 04:00:00+00:00 UTC     0.00
+  ```
+
+### Punti Chiave
+
+1. **Ricerca Robusta**: 5 location controllate per resilienza
+2. **Error Handling**: `raise FileNotFoundError` blocca se file mancanti
+3. **Concatenazione**: `ignore_index=True` evita duplicati index
+4. **Identificazione Automatica**: List comprehension per trovare target
+5. **Rinomina Standard**: `datetime`, `power_kw` (nomi consistenti)
+
+---
+
+## Cella 6: Caricamento Dati Meteo, Merge e Preprocessing
+
+Questa cella carica i dati meteo, li concatena, gestisce i timestamp, e fa il merge con i dati PV per creare il dataset unificato finale.
+
+### Codice Completo con Numerazione
+
+#### Parte 1: Caricamento Dati Meteo (Righe 1-17)
+
+```python
+1  print("Caricamento dati meteo...")
+2  # Carica dati meteo
+3  wx1 = pd.read_csv(wx_file1)
+4  wx2 = pd.read_csv(wx_file2)
+5  
+6  print(f"WX1 shape: {wx1.shape}")
+7  print(f"WX2 shape: {wx2.shape}")
+8  print(f"\nColonne WX1: {wx1.columns.tolist()}")
+9  
+10 # Concatena i dati meteo
+11 wx_data = pd.concat([wx1, wx2], ignore_index=True)
+12 print(f"\nWX data concatenato: {wx_data.shape}")
+13 
+14 # Rinomina la colonna timestamp
+15 wx_data = wx_data.rename(columns={'dt_iso': 'datetime'})
+16 print(f"\nPrime righe WX data:")
+17 print(wx_data.head())
+```
+
+#### Parte 2: Conversione Timestamp e Merge (Righe 1-28)
+
+```python
+1  print("Conversione timestamp e merging...")
+2  
+3  # Converti timestamp in datetime e gestisci timezone
+4  # Usa format='mixed' per gestire formati inconsistenti (con/senza microsecondi)
+5  pv_data['datetime'] = pd.to_datetime(pv_data['datetime'], format='mixed', utc=True).dt.tz_localize(None)
+6  wx_data['datetime'] = pd.to_datetime(wx_data['datetime'], format='mixed', utc=True).dt.tz_localize(None)
+7  
+8  print(f"\nRange temporale PV: {pv_data['datetime'].min()} to {pv_data['datetime'].max()}")
+9  print(f"Range temporale WX: {wx_data['datetime'].min()} to {wx_data['datetime'].max()}")
+10 
+11 # Rimuovi duplicati temporali
+12 pv_data = pv_data.drop_duplicates(subset=['datetime'], keep='first')
+13 wx_data = wx_data.drop_duplicates(subset=['datetime'], keep='first')
+14 
+15 print(f"\nDopo rimozione duplicati:")
+16 print(f"PV data shape: {pv_data.shape}")
+17 print(f"WX data shape: {wx_data.shape}")
+18 
+19 # Merge dei dataset
+20 data = pd.merge(pv_data, wx_data, on='datetime', how='inner')
+21 print(f"\nDataset merged shape: {data.shape}")
+22 print(f"\nColonne finali: {data.columns.tolist()}")
+23 
+24 # Ordina per timestamp
+25 data = data.sort_values('datetime').reset_index(drop=True)
+26 
+27 print(f"\nPrime righe del dataset unificato:")
+28 print(data.head(10))
+```
+
+### Spiegazione Dettagliata
+
+#### Parte 1: Caricamento e Concatenazione Dati Meteo
+
+**Righe 3-4: Lettura CSV**
+```python
+wx1 = pd.read_csv(wx_file1)
+wx2 = pd.read_csv(wx_file2)
+```
+- Identico a PV: carica 2 file meteo
+- **wx1**: 8760 righe × 9 colonne (luglio 2010 - giugno 2011)
+- **wx2**: 8557 righe × 9 colonne (luglio 2011 - giugno 2012)
+- **Colonne**: `['dt_iso', 'temp', 'Dni', 'Ghi', 'humidity', 'clouds_all', 'wind_speed', 'pressure', 'rain_1h']`
+
+**Colonne Meteo - Significato**:
+1. **`dt_iso`**: Timestamp ISO format (datetime)
+2. **`temp`**: Temperatura (°C)
+3. **`Dni`**: Direct Normal Irradiance - Irradianza diretta normale (W/m²)
+4. **`Ghi`**: Global Horizontal Irradiance - Irradianza globale orizzontale (W/m²)
+5. **`humidity`**: Umidità relativa (%)
+6. **`clouds_all`**: Copertura nuvolosa totale (%)
+7. **`wind_speed`**: Velocità del vento (m/s)
+8. **`pressure`**: Pressione atmosferica (hPa)
+9. **`rain_1h`**: Pioggia ultima ora (mm)
+
+**Righe 11: Concatenazione**
+```python
+wx_data = pd.concat([wx1, wx2], ignore_index=True)
+```
+- Identico a PV concatenation
+- **Risultato**: 17317 righe × 9 colonne (8760 + 8557)
+- **`ignore_index=True`**: Index continuo 0-17316
+
+**Righe 15: Rinomina Timestamp**
+```python
+wx_data = wx_data.rename(columns={'dt_iso': 'datetime'})
+```
+- Rinomina `dt_iso` → `datetime`
+- **Perché**: Standardizzazione con dataset PV
+- **Necessario per merge**: Entrambi dataset devono avere stessa colonna join
+
+#### Parte 2: Conversione Timestamp
+
+**Righe 5-6: pd.to_datetime() - Analisi Complessa**
+```python
+pv_data['datetime'] = pd.to_datetime(pv_data['datetime'], format='mixed', utc=True).dt.tz_localize(None)
+wx_data['datetime'] = pd.to_datetime(wx_data['datetime'], format='mixed', utc=True).dt.tz_localize(None)
+```
+
+**Scomposizione in 3 passi**:
+
+1. **`pd.to_datetime(pv_data['datetime'], format='mixed', utc=True)`**
+
+   **Parametri**:
+   - **`pv_data['datetime']`**: Serie da convertire (stringhe)
+   - **`format='mixed'`**: **CRUCIALE**
+     - Introdotto in Pandas 2.0+
+     - Gestisce formati timestamp **inconsistenti** nello stesso dataset
+     - Nel progetto: alcuni timestamp con microsecondi, altri no
+     - Esempi:
+       ```
+       "2010-07-01 00:00:00+00:00 UTC"          # Senza microsecondi
+       "2010-07-01 01:00:00.000000+00:00 UTC"   # Con microsecondi
+       ```
+     - **Senza `format='mixed'`**: Error `ValueError: time data doesn't match format`
+   
+   - **`utc=True`**: **IMPORTANTE**
+     - Interpreta timestamp come UTC
+     - Converte in `datetime64[ns, UTC]` (timezone-aware)
+     - Nel dataset: già in UTC ("+00:00" nell'originale)
+
+   **Output Passo 1**: DatetimeIndex con timezone UTC
+   ```python
+   DatetimeIndex(['2010-07-01 00:00:00+00:00',
+                  '2010-07-01 01:00:00+00:00', ...], 
+                  dtype='datetime64[ns, UTC]')
+   ```
+
+2. **`.dt` accessor**
+   - **`.dt`**: Accessor per operazioni su datetime
+   - Disponibile solo su Series con dtype `datetime64`
+   - Fornisce metodi: `.year`, `.month`, `.day`, `.hour`, `.tz_localize()`, etc.
+
+3. **`.tz_localize(None)`**
+   - **Scopo**: Rimuove timezone information
+   - **Perché**:
+     - TimeSeriesDataSet di pytorch-forecasting preferisce datetime naive (senza TZ)
+     - Riduce complessità (tutti dati già in UTC)
+     - Evita problemi DST (Daylight Saving Time)
+   - **Conversione**:
+     - `datetime64[ns, UTC]` → `datetime64[ns]` (naive)
+     - **NON cambia valori**: `2010-07-01 00:00:00+00:00` → `2010-07-01 00:00:00`
+   
+   **Output Finale**: DatetimeIndex naive
+   ```python
+   DatetimeIndex(['2010-07-01 00:00:00',
+                  '2010-07-01 01:00:00', ...], 
+                  dtype='datetime64[ns]')
+   ```
+
+**Risultato**:
+- Colonna `datetime` ora ha dtype `datetime64[ns]` (datetime naive)
+- Pronta per operazioni temporali e merge
+
+**Righe 8-9: Verifica Range Temporale**
+```python
+print(f"\nRange temporale PV: {pv_data['datetime'].min()} to {pv_data['datetime'].max()}")
+print(f"Range temporale WX: {wx_data['datetime'].min()} to {wx_data['datetime'].max()}")
+```
+- **`.min()`**, **`.max()`**: Metodi Series per trovare min/max
+- **Output atteso**:
+  ```
+  Range temporale PV: 2010-07-01 00:00:00 to 2012-06-30 23:00:00
+  Range temporale WX: 2010-07-01 00:00:00 to 2012-06-30 23:00:00
+  ```
+- **Verifica**: Range identici → buono per merge
+
+#### Parte 3: Rimozione Duplicati
+
+**Righe 12-13: drop_duplicates()**
+```python
+pv_data = pv_data.drop_duplicates(subset=['datetime'], keep='first')
+wx_data = wx_data.drop_duplicates(subset=['datetime'], keep='first')
+```
+
+**`df.drop_duplicates()` - Parametri**:
+- **`subset=['datetime']`**: Colonne da usare per identificare duplicati
+  - Se due righe hanno stesso `datetime`, sono considerate duplicate
+  - Altre colonne ignorate per il confronto
+  
+- **`keep='first'`**: Quale riga mantenere tra duplicati
+  - `'first'`: Mantiene prima occorrenza, rimuove successive
+  - Alternative: `'last'` (ultima), `False` (rimuove tutte)
+
+**Perché Necessario**:
+- Dataset potrebbe avere timestamp duplicati per errori di logging
+- Merge richiede chiave unica (1-to-1 correspondence)
+- **Nel progetto**: Pochi/zero duplicati (dataset pulito)
+
+**Performance**:
+- Usa hash table per identificazione rapida
+- Complessità: O(n) dove n = numero righe
+
+#### Parte 4: Merge Dataset
+
+**Riga 20: pd.merge() - Operazione Cruciale**
+```python
+data = pd.merge(pv_data, wx_data, on='datetime', how='inner')
+```
+
+**`pd.merge()` - Parametri Dettagliati**:
+
+1. **`pv_data`** (left DataFrame):
+   - Shape: (17317, 2)
+   - Colonne: `['datetime', 'power_kw']`
+
+2. **`wx_data`** (right DataFrame):
+   - Shape: (17317, 9)
+   - Colonne: `['datetime', 'temp', 'Dni', 'Ghi', 'humidity', 'clouds_all', 'wind_speed', 'pressure', 'rain_1h']`
+
+3. **`on='datetime'`**: 
+   - Colonna chiave per il join
+   - Equivalente SQL: `ON pv_data.datetime = wx_data.datetime`
+   - **Assumo**: Datetime identici tra dataset (stesso timestamp)
+
+4. **`how='inner'`**: **CRUCIALE - Tipo di Join**
+   
+   **Opzioni disponibili**:
+   - **`'inner'`** (usato): Mantiene solo righe con match in **entrambi** dataset
+     - Se `datetime` esiste in PV ma non in WX → riga scartata
+     - Se `datetime` esiste in WX ma non in PV → riga scartata
+     - **Risultato**: Solo timestamp comuni
+   
+   - **`'left'`**: Mantiene tutte righe di PV, aggiungi WX dove c'è match
+     - Missing WX → NaN nelle colonne meteo
+   
+   - **`'right'`**: Mantiene tutte righe di WX
+   
+   - **`'outer'`**: Mantiene tutte righe di entrambi (union)
+     - Missing → NaN
+
+   **Perché `inner`**:
+   - Vogliamo solo timestamp con **entrambe** le informazioni (PV + meteo)
+   - Forecasting richiede feature complete (no missing)
+   - Dataset ben allineati → poche righe perse
+
+**Visualizzazione Merge**:
+```
+pv_data:                          wx_data:
+datetime          | power_kw      datetime          | temp | Dni | Ghi | ...
+2010-07-01 00:00  | 0.0           2010-07-01 00:00  | 18.5 | 0   | 0   | ...
+2010-07-01 01:00  | 0.0           2010-07-01 01:00  | 18.2 | 0   | 0   | ...
+...                               ...
+
+↓ pd.merge(..., on='datetime', how='inner') ↓
+
+data:
+datetime          | power_kw | temp | Dni | Ghi | humidity | clouds_all | wind_speed | pressure | rain_1h
+2010-07-01 00:00  | 0.0      | 18.5 | 0   | 0   | 75       | 20         | 2.1        | 1013     | 0.0
+2010-07-01 01:00  | 0.0      | 18.2 | 0   | 0   | 76       | 22         | 1.9        | 1013     | 0.0
+...
+```
+
+**Risultato**:
+- **Shape**: (17317, 10) = 2 (PV) + 9 (WX) - 1 (datetime condiviso)
+- **Colonne**: `['datetime', 'power_kw', 'temp', 'Dni', 'Ghi', 'humidity', 'clouds_all', 'wind_speed', 'pressure', 'rain_1h']`
+
+#### Parte 5: Ordinamento Finale
+
+**Riga 25: sort_values() e reset_index()**
+```python
+data = data.sort_values('datetime').reset_index(drop=True)
+```
+
+**Scomposizione**:
+
+1. **`data.sort_values('datetime')`**:
+   - **Scopo**: Ordina righe per timestamp crescente
+   - **Perché necessario**:
+     - Dopo merge, ordine potrebbe essere scrambled
+     - TimeSeriesDataSet richiede ordine cronologico
+     - Visualizzazioni temporali necessitano sorting
+   - **Complessità**: O(n log n) (Timsort in Pandas)
+
+2. **`.reset_index(drop=True)`**:
+   - **`.reset_index()`**: Ricrea index sequenziale 0, 1, 2, ...
+   - **`drop=True`**: NON aggiungere vecchio index come colonna
+     - `drop=False` creerebbe colonna extra `index`
+   - **Perché necessario**: Dopo sort, index non è più sequenziale
+
+**Esempio Prima/Dopo**:
+```
+PRIMA sort_values:
+     datetime          | power_kw | temp | ...
+105  2010-07-05 09:00  | 12.3     | 25.1 | ...
+89   2010-07-04 17:00  | 8.5      | 27.3 | ...
+200  2010-07-09 08:00  | 11.2     | 24.8 | ...
+     ↓ Index disordinato
+
+DOPO sort_values + reset_index:
+    datetime          | power_kw | temp | ...
+0   2010-07-01 00:00  | 0.0      | 18.5 | ...
+1   2010-07-01 01:00  | 0.0      | 18.2 | ...
+2   2010-07-01 02:00  | 0.0      | 18.0 | ...
+    ↓ Index ordinato, cronologia corretta
+```
+
+### Punti Chiave Cella 6
+
+1. **`format='mixed'`**: Essenziale per timestamp inconsistenti
+2. **Timezone handling**: `utc=True` + `.tz_localize(None)` per datetime naive
+3. **Inner join**: Mantiene solo timestamp comuni (no missing data)
+4. **Ordinamento**: `sort_values()` + `reset_index()` per cronologia corretta
+5. **Dataset finale**: 17,317 ore × 10 colonne (1 target + 8 meteo + 1 timestamp)
+
+### Schema Completo Flusso Dati (Celle 3-6)
+
+```
+Excel Files (2 fogli ciascuno)
+  ↓
+[Cella 3] excel_to_csv()
+  ↓
+4 File CSV separati
+  ↓
+[Cella 4] Ricerca file (os.walk)
+  ↓
+[Cella 5] Caricamento PV + concatenazione
+  pv1 (8760×2) + pv2 (8557×2) → pv_data (17317×2)
+  ↓
+[Cella 6] Caricamento WX + concatenazione
+  wx1 (8760×9) + wx2 (8557×9) → wx_data (17317×9)
+  ↓
+[Cella 6] Conversione timestamp (pd.to_datetime format='mixed')
+  ↓
+[Cella 6] Rimozione duplicati (drop_duplicates)
+  ↓
+[Cella 6] Merge (pd.merge inner join on 'datetime')
+  ↓
+[Cella 6] Ordinamento (sort_values + reset_index)
+  ↓
+Dataset Unificato Finale: (17317, 10)
+  - datetime (datetime64[ns])
+  - power_kw (float64) ← TARGET
+  - 8 feature meteo (float64)
+```
+
+---
+
+## Prossimi Passi
+
+Le prossime sezioni del notebook coprono:
+- **Sezione 3 (Celle 7-9)**: Data Analysis & Missing Values
+- **Sezione 4 (Celle 10-11)**: Feature Engineering
+- **Sezione 5 (Celle 12-14)**: TimeSeriesDataSet Configuration
+
+**Vuoi che continui con le celle 7-9?**
+
