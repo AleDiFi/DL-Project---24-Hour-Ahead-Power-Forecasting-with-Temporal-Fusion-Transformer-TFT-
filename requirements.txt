@@ -19,6 +19,9 @@ openpyxl>=3.0.0
 # Logging and monitoring
 tensorboard>=2.13.0
 
+# Hyperparameter optimization
+optuna>=3.4.0
+
 # Optional but recommended
 ipykernel>=6.25.0
 jupyterlab>=4.0.0

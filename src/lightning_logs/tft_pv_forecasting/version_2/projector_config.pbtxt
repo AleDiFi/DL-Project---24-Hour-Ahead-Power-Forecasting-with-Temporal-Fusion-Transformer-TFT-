@@ -1,5 +1,0 @@
-embeddings {
-  tensor_name: "group_id:08155"
-  metadata_path: "08155/group_id\\metadata.tsv"
-  tensor_path: "08155/group_id\\tensors.tsv"
-}
