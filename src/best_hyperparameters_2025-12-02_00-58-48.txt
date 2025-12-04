@@ -1,0 +1,95 @@
+================================================================================
+TEMPORAL FUSION TRANSFORMER - BEST HYPERPARAMETERS
+Photovoltaic Power Forecasting (24h ahead)
+================================================================================
+Generated on: 2025-12-02 00:58:48
+Hyperparameter tuning completed with 5 trials
+
+DATASET INFORMATION:
+----------------------------------------
+Training samples: 13,854
+Validation samples: 3,463
+Total samples: 17,317
+Train/Val split: 80%/20% (temporal)
+Encoder length: 168 hours (1 week)
+Prediction length: 24 hours (1 day)
+
+OPTIMAL HYPERPARAMETERS:
+----------------------------------------
+Model Architecture:
+  hidden_size: 128
+  lstm_layers: 2
+  attention_head_size: 2
+  hidden_continuous_size: 32
+  output_size: 7 (fixed - quantile loss)
+
+Training Configuration:
+  learning_rate: 0.000157
+  batch_size: 64
+  dropout: 0.151
+  gradient_clip_val: 0.286
+  patience (early stopping): 16
+  max_epochs: 150 (final model)
+  loss_function: QuantileLoss
+
+FEATURE CONFIGURATION:
+----------------------------------------
+Time-varying known reals:
+  - hour
+  - day_of_month
+  - month
+  - day_of_week
+  - temp
+  - Dni
+  - Ghi
+  - humidity
+  - clouds_all
+  - wind_speed
+  - pressure
+  - rain_1h
+
+Time-varying unknown reals:
+  - power_kw (target variable)
+
+Static categoricals:
+  - group_id
+
+PERFORMANCE METRICS:
+----------------------------------------
+Validation Loss: 0.701789
+MAE (Mean Absolute Error): 1.273229 kW
+RMSE (Root Mean Squared Error): 2.520699 kW
+MAPE (Mean Absolute Percentage Error): 111304152.0000%
+R² (Coefficient of Determination): 0.974181
+
+HYPERPARAMETER TUNING DETAILS:
+----------------------------------------
+Total trials executed: 5
+Completed trials: 5
+Failed trials: 0
+Pruned trials: 0
+Best trial number: #1
+Best validation loss: 0.649721
+Optimization algorithm: TPE Sampler
+Pruning algorithm: Median Pruner
+
+USAGE INSTRUCTIONS:
+----------------------------------------
+To reproduce this model, use the hyperparameters above with:
+1. Load and preprocess data with 168h encoder / 24h prediction
+2. Create TimeSeriesDataSet with the specified features
+3. Initialize TemporalFusionTransformer with these hyperparameters
+4. Train with EarlyStopping (patience as specified)
+5. Use QuantileLoss for probabilistic forecasting
+
+NOTES:
+----------------------------------------
+- This configuration was optimized using Optuna Bayesian optimization
+- Temporal cross-validation was used to prevent data leakage
+- The model provides 24-hour ahead forecasting with uncertainty quantification
+- Performance metrics are calculated on the held-out validation set
+- For production use, consider retraining on the full dataset
+
+================================================================================
+END OF HYPERPARAMETER CONFIGURATION
+================================================================================

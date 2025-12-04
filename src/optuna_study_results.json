@@ -1,0 +1,19 @@
+{
+    "best_trial_number": 1,
+    "best_validation_loss": 0.6497210502624512,
+    "best_params": {
+        "hidden_size": 128,
+        "lstm_layers": 2,
+        "attention_head_size": 2,
+        "hidden_continuous_size": 32,
+        "dropout": 0.15115723710618748,
+        "learning_rate": 0.00015673095467235422,
+        "batch_size": 64,
+        "patience": 16,
+        "gradient_clip_val": 0.2855770166121293
+    },
+    "n_trials": 5,
+    "n_completed": 5,
+    "n_failed": 0,
+    "n_pruned": 0
+}

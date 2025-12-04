@@ -1,0 +1,22 @@
+{
+    "MAE": 1.2732293605804443,
+    "RMSE": 2.52069878547516,
+    "MAPE": 111304152.0,
+    "R2": 0.9741814732551575,
+    "val_loss": 0.701789140701294,
+    "best_hyperparameters": {
+        "hidden_size": 128,
+        "lstm_layers": 2,
+        "attention_head_size": 2,
+        "hidden_continuous_size": 32,
+        "dropout": 0.15115723710618748,
+        "learning_rate": 0.00015673095467235422,
+        "batch_size": 64,
+        "patience": 16,
+        "gradient_clip_val": 0.2855770166121293
+    },
+    "training_samples": 13854,
+    "validation_samples": 3463,
+    "encoder_length": 168,
+    "prediction_length": 24
+}
