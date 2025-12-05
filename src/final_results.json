@@ -1,0 +1,26 @@
+{
+    "MAE": 4.1058478355407715,
+    "RMSE": 8.234908663921233,
+    "MAPE": 340945408.0,
+    "R2": 0.7244460582733154,
+    "val_loss": 2.555426597595215,
+    "best_hyperparameters": {
+        "hidden_size": 64,
+        "lstm_layers": 3,
+        "attention_head_size": 1,
+        "hidden_continuous_size": 16,
+        "dropout": 0.36616382277289805,
+        "learning_rate": 0.0026100256506134765,
+        "batch_size": 128,
+        "patience": 21,
+        "gradient_clip_val": 1.5648376419136658
+    },
+    "training_samples": 13853,
+    "validation_samples": 3464,
+    "encoder_length": 168,
+    "prediction_length": 24,
+    "optuna_trials": 5,
+    "optuna_best_trial": 4,
+    "optuna_best_cv_loss": 2.08613862991333,
+    "timestamp": "2025-12-04 23:56:26"
+}

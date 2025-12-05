@@ -1,19 +1,20 @@
 {
-    "best_trial_number": 1,
-    "best_validation_loss": 0.6497210502624512,
+    "best_trial_number": 4,
+    "best_validation_loss": 2.08613862991333,
     "best_params": {
-        "hidden_size": 128,
-        "lstm_layers": 2,
-        "attention_head_size": 2,
-        "hidden_continuous_size": 32,
-        "dropout": 0.15115723710618748,
-        "learning_rate": 0.00015673095467235422,
-        "batch_size": 64,
-        "patience": 16,
-        "gradient_clip_val": 0.2855770166121293
+        "hidden_size": 64,
+        "lstm_layers": 3,
+        "attention_head_size": 1,
+        "hidden_continuous_size": 16,
+        "dropout": 0.36616382277289805,
+        "learning_rate": 0.0026100256506134765,
+        "batch_size": 128,
+        "patience": 21,
+        "gradient_clip_val": 1.5648376419136658
     },
     "n_trials": 5,
     "n_completed": 5,
     "n_failed": 0,
-    "n_pruned": 0
+    "n_pruned": 0,
+    "optimization_duration_hours": 4.5300333417124214
 }

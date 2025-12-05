@@ -1,0 +1,58 @@
+================================================================================
+TEMPORAL FUSION TRANSFORMER - TRAINING REPORT
+Photovoltaic Power Forecasting (24h ahead)
+================================================================================
+Generated on: 2025-12-04 23:56:26
+
+HYPERPARAMETER TUNING RESULTS:
+----------------------------------------
+Total trials: 5
+Completed trials: 5
+Best trial: #4
+Best CV validation loss: 2.086139
+
+OPTIMAL HYPERPARAMETERS:
+----------------------------------------
+  hidden_size: 64
+  lstm_layers: 3
+  attention_head_size: 1
+  hidden_continuous_size: 16
+  dropout: 0.36616382277289805
+  learning_rate: 0.0026100256506134765
+  batch_size: 128
+  patience: 21
+  gradient_clip_val: 1.5648376419136658
+
+DATASET INFORMATION:
+----------------------------------------
+Training samples: 13,853
+Validation samples: 3,464
+Total samples: 17,317
+Encoder length: 168 hours (1 week)
+Prediction length: 24 hours (1 day)
+Train range: 2010-07-01 00:00:00 to 2012-02-07 05:00:00
+Val range: 2012-02-07 06:00:00 to 2012-06-30 13:00:00
+
+FEATURE CONFIGURATION:
+----------------------------------------
+Static categoricals: ['group_id']
+Unknown reals: ['power_kw']
+Known reals (1): ['time_idx']
+
+FINAL MODEL PERFORMANCE:
+----------------------------------------
+MAE:   4.105848 kW
+RMSE:  8.234909 kW
+MAPE:  340945408.0000%
+R²:    0.724446
+Val Loss: 2.555427
+
+MODEL FILES:
+----------------------------------------
+Model checkpoint: final_best_model\best_tft_model.ckpt
+Hyperparameters: final_best_model\best_hyperparameters.json
+Model info: final_best_model\model_info.json
+
+================================================================================
+Training completed successfully!
+================================================================================

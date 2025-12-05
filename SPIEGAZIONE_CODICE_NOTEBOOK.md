@@ -232,6 +232,155 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
     - Calcolo su array flattened: `y_true_flat`, `y_pred_flat`
     - Metriche per horizon: MAE/RMSE per ogni ora (1-24)
 
+### Sezione : Hyperparameter Optimization
+
+```python
+import optuna
+from optuna.integration import PyTorchLightningPruningCallback
+import json
+import time
+import gc
+```
+
+**Spiegazione riga per riga:**
+
+16. **`import optuna`**
+    - Importa Optuna, framework per hyperparameter optimization
+    - **Cos'è Optuna**:
+      - Libreria open-source per ottimizzazione automatica di iperparametri
+      - Sviluppata da Preferred Networks (azienda giapponese)
+      - Usa algoritmi di ottimizzazione Bayesiana (TPE - Tree-structured Parzen Estimator)
+    - **Funzionalità principali**:
+      - Define-by-run API: definisci search space dinamicamente
+      - Pruning automatico: termina trial non promettenti
+      - Parallelizzazione: esegue multiple trial in parallelo
+      - Visualizzazioni built-in: importance, history, contour plots
+    - **Nel progetto**: 
+      - Ottimizza 9 iperparametri del TFT (hidden_size, learning_rate, dropout, etc.)
+      - 20 trial con TPE Sampler
+      - Cross-validation su 5 fold per ogni trial
+      - Salva risultati in `optuna_study_results.json`
+
+17. **`from optuna.integration import PyTorchLightningPruningCallback`**
+    - Importa callback specifico per integrazione Optuna + PyTorch Lightning
+    - **PyTorchLightningPruningCallback**:
+      - **Scopo**: Terminare anticipatamente trial non promettenti durante training
+      - **Come funziona**:
+        1. Monitora metrica (es. `val_loss`) ad ogni epoch
+        2. Confronta con altri trial alla stessa epoch
+        3. Se performance significativamente peggiore → PRUNE (termina)
+      - **Vantaggi**:
+        - Risparmia tempo computazionale (no training completo su config scadenti)
+        - Permette più trial nello stesso tempo
+        - Median Pruner: prune se sotto mediana degli altri trial
+    - **Parametri chiave**:
+      - `monitor`: metrica da monitorare (es. `"val_loss"`)
+      - `mode`: `"min"` o `"max"` (minimize o maximize)
+    - **Nel progetto**: 
+      - Configurato con `MedianPruner(n_startup_trials=5, n_warmup_steps=2)`
+      - Pruning attivo dopo 5 trial di warmup
+      - Salva ~30-40% tempo di ottimizzazione
+
+18. **`import json`**
+    - Importa modulo JSON (JavaScript Object Notation) per serializzazione dati
+    - **Funzioni usate**:
+      - `json.dump(obj, file)`: Scrive oggetto Python in file JSON
+      - `json.load(file)`: Legge file JSON in oggetto Python
+      - `json.dumps(obj)`: Converte oggetto Python in stringa JSON
+    - **Nel progetto**:
+      - Salva best hyperparameters: `best_hyperparameters.json`
+      - Salva risultati Optuna: `optuna_study_results.json`
+      - Salva metriche finali: `final_results.json`
+      - Salva model info: `model_info.json`
+    - **Perché JSON**:
+      - Human-readable: facile ispezionare risultati
+      - Language-agnostic: può essere letto da qualsiasi linguaggio
+      - Leggero: più compatto di XML
+    - **Nota importante**: NumPy types (float32, int64) non sono JSON-serializable
+      - Necessaria conversione esplicita: `float()`, `int()`
+
+19. **`import time`**
+    - Importa modulo time per misurare durata operazioni
+    - **Funzioni usate**:
+      - `time.time()`: timestamp UNIX corrente (secondi dal 1970-01-01)
+      - Differenza tra due `time.time()` = durata in secondi
+    - **Nel progetto**:
+      ```python
+      start_time = time.time()
+      study.optimize(...)  # Hyperparameter tuning
+      end_time = time.time()
+      duration = end_time - start_time  # Durata in secondi
+      print(f"Tempo totale: {duration/3600:.2f} ore")
+      ```
+    - **Output tipico**: 
+      - 20 trials × 5 fold × 30 epochs ≈ 2-4 ore su RTX 4060
+      - Salvato in `optuna_study_results.json`: `"optimization_duration_hours"`
+
+20. **`import gc`**
+    - Importa Garbage Collector di Python
+    - **Cos'è il Garbage Collection**:
+      - Processo automatico che libera memoria di oggetti non più usati
+      - Python usa reference counting + generational GC
+      - Normalmente automatico, ma può essere forzato manualmente
+    - **Funzioni usate**:
+      - `gc.collect()`: Forza garbage collection immediata
+      - Ritorna numero di oggetti collezionati
+    - **Quando usare**:
+      - Dopo operazioni che creano molti oggetti temporanei
+      - Training di modelli grandi (tensori GPU)
+      - Loop con molte iterazioni
+    - **Nel progetto**:
+      ```python
+      # Dopo ogni fold in cross-validation
+      del tft, trainer, training_dataset, validation_dataset
+      torch.cuda.empty_cache() if torch.cuda.is_available() else None
+      gc.collect()  # Libera memoria Python
+      ```
+    - **Perché importante**:
+      - GPU ha memoria limitata (8GB RTX 4060)
+      - Senza cleanup, memoria si accumula → OOM error
+      - Combinazione `del` + `torch.cuda.empty_cache()` + `gc.collect()` libera:
+        1. Riferimenti Python (del)
+        2. Cache GPU PyTorch (empty_cache)
+        3. Oggetti orfani Python (gc.collect)
+
+### Riepilogo Sezione Hyperparameter Optimization
+
+Questa sezione importa le librerie necessarie per:
+1. **Optuna**: Ottimizzazione Bayesiana automatica degli iperparametri
+2. **PyTorchLightningPruningCallback**: Early stopping intelligente per trial
+3. **JSON**: Persistenza risultati in formato leggibile
+4. **time**: Tracciamento durata ottimizzazione
+5. **gc**: Gestione memoria durante training intensivo
+
+**Pipeline completa**:
+```
+Define search space → Create Optuna study → Optimize (20 trials)
+    ↓
+Per ogni trial:
+    ↓
+    Sample hyperparameters from TPE
+    ↓
+    Per ogni fold (5 fold CV):
+        ↓
+        Create dataset → Train model (30 epochs) → Validate
+        ↓
+        Pruning check: continua o termina?
+        ↓
+        Cleanup memoria (gc.collect)
+    ↓
+    Return mean validation loss
+↓
+Best hyperparameters → Save JSON → Final training (150 epochs)
+```
+
+**Output files generati**:
+- `optuna_study_results.json`: Tutti i trial + best params
+- `best_hyperparameters.json`: Solo best config
+- `model_info.json`: Metadata modello completi
+
+---
+
 ### Sezione 6: Print Versioni
 
 ```python
@@ -288,7 +437,7 @@ Questa cella diagnostica la configurazione GPU/CUDA in dettaglio. È stata aggiu
 17     x = torch.randn(3, 3).cuda()
 18     print(f"\n✓ Test GPU riuscito! Tensor creato su: {x.device}")
 19 else:
-20     print("\n⚠️  GPU non disponibile. Possibili cause:")
+20     print("\n  GPU non disponibile. Possibili cause:")
 21     print("  1. Driver NVIDIA non installati o non aggiornati")
 22     print("  2. GPU non compatibile con CUDA 11.8")
 23     print("  3. Ambiente virtuale non configurato correttamente")
@@ -1893,12 +2042,1854 @@ Dataset Unificato Finale: (17317, 10)
 
 ---
 
+## Sezione 3: Data Analysis & Missing Values
+
+Questa sezione analizza il dataset unificato e gestisce i valori mancanti prima del training.
+
+### Cella 7: Statistiche Descrittive del Dataset
+
+```python
+1  print("Analisi dei dati...\n")
+2  print(f"Dimensione dataset: {data.shape}")
+3  print(f"\nInfo dataset:")
+4  print(data.info())
+5  
+6  print("\n" + "="*50)
+7  print("STATISTICHE DESCRITTIVE")
+8  print("="*50)
+9  print(data.describe())
+```
+
+#### Spiegazione Riga per Riga
+
+**Riga 1: Header**
+```python
+print("Analisi dei dati...\n")
+```
+- **`\n`**: newline alla fine per spaziatura verticale
+- Indica inizio della fase di analisi esplorativa
+
+**Riga 2: Shape del Dataset**
+```python
+print(f"Dimensione dataset: {data.shape}")
+```
+- **`data.shape`**: tupla (righe, colonne)
+- Nel progetto: `(17317, 10)` dopo merge
+  - 17,317 righe = ore di dati (2 anni circa)
+  - 10 colonne = 1 datetime + 1 target + 8 feature meteo
+- **Verifica importante**: se shape diverso da atteso → problema nel merge
+
+**Righe 3-4: DataFrame Info**
+```python
+print(f"\nInfo dataset:")
+print(data.info())
+```
+- **`data.info()`**: metodo Pandas che stampa:
+  1. **Tipo DataFrame**: `<class 'pandas.core.frame.DataFrame'>`
+  2. **RangeIndex**: indice delle righe (0 to 17316)
+  3. **Colonne** (per ciascuna):
+     - Nome colonna
+     - Non-Null Count: numero valori non-null
+     - Dtype: tipo di dato (datetime64, float64, object, etc.)
+  4. **Memory usage**: memoria RAM occupata
+
+**Output esempio**:
+```
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 17317 entries, 0 to 17316
+Data columns (total 10 columns):
+ #   Column      Non-Null Count  Dtype         
+---  ------      --------------  -----         
+ 0   datetime    17317 non-null  datetime64[ns]
+ 1   power_kw    17317 non-null  float64       
+ 2   temp        17317 non-null  float64       
+ 3   Dni         17317 non-null  float64       
+ 4   Ghi         17317 non-null  float64       
+ 5   humidity    17317 non-null  float64       
+ 6   clouds_all  17317 non-null  float64       
+ 7   wind_speed  17317 non-null  float64       
+ 8   pressure    17317 non-null  float64       
+ 9   rain_1h     16500 non-null  float64       ← 817 NaN!
+dtypes: datetime64[ns](1), float64(9)
+memory usage: 1.3+ MB
+```
+
+**Cosa cercare in info()**:
+- ✅ **Non-Null Count = totale righe**: nessun NaN (ideale)
+- ⚠️ **Non-Null Count < totale**: valori mancanti presenti
+- ✅ **Dtype corretto**: datetime per timestamp, float per numerici
+- ❌ **Dtype 'object'** per colonne numeriche: problema conversione
+
+**Righe 6-9: Statistiche Descrittive**
+```python
+print("\n" + "="*50)
+print("STATISTICHE DESCRITTIVE")
+print("="*50)
+print(data.describe())
+```
+- **`data.describe()`**: statistiche per colonne numeriche
+  - **count**: numero valori non-null
+  - **mean**: media aritmetica
+  - **std**: deviazione standard (dispersione)
+  - **min**: valore minimo
+  - **25%**: primo quartile (25° percentile)
+  - **50%**: mediana (50° percentile)
+  - **75%**: terzo quartile (75° percentile)
+  - **max**: valore massimo
+
+**Output esempio per `power_kw`**:
+```
+       power_kw      temp        Dni  ...
+count  17317.00  17317.00  17317.00  ...
+mean      18.23     15.42   1245.67  ...
+std       19.82      8.91    856.23  ...
+min        0.00     -5.30      0.00  ...
+25%        0.00      8.50    450.12  ...
+50%       15.67     15.20   1180.45  ...
+75%       35.89     22.10   1890.34  ...
+max       58.45     35.80   2950.00  ...
+```
+
+**Analisi delle statistiche**:
+- **`power_kw min=0, max=58.45`**: Range realistico per impianto fotovoltaico
+- **`mean=18.23, median=15.67`**: Distribuzione leggermente asimmetrica a destra
+- **`std=19.82`**: Alta variabilità (giorno vs notte, stagioni)
+- **`25%=0`**: 25% dei valori sono zero (ore notturne!)
+
+**Perché `describe()` è importante**:
+1. **Outlier detection**: valori min/max fuori range → errori sensori
+2. **Scaling**: capire scala feature per normalizzazione
+3. **Distribuzione**: simmetrica (mean≈median) vs asimmetrica
+4. **Variabilità**: std alta → feature volatile, std bassa → poco informativa
+
+---
+
+### Cella 8: Identificazione Valori Mancanti
+
+```python
+1  print("Controllo valori mancanti...\n")
+2  missing = data.isnull().sum()
+3  missing_pct = (missing / len(data)) * 100
+4  missing_df = pd.DataFrame({
+5      'Missing Count': missing,
+6      'Percentage': missing_pct
+7  })
+8  missing_df = missing_df[missing_df['Missing Count'] > 0].sort_values('Missing Count', ascending=False)
+9  
+10 if len(missing_df) > 0:
+11     print("Colonne con valori mancanti:")
+12     print(missing_df)
+13 else:
+14     print("Nessun valore mancante trovato!")
+```
+
+#### Spiegazione Riga per Riga
+
+**Riga 2: Conteggio NaN per Colonna**
+```python
+missing = data.isnull().sum()
+```
+- **Scomposizione**:
+  1. **`data.isnull()`**: DataFrame booleano (True se NaN, False altrimenti)
+  2. **`.sum()`**: somma per colonna (True=1, False=0)
+- **Output**: Series con numero NaN per colonna
+  ```python
+  datetime      0
+  power_kw      0
+  temp          0
+  ...
+  rain_1h     817
+  dtype: int64
+  ```
+
+**Riga 3: Percentuale Mancanti**
+```python
+missing_pct = (missing / len(data)) * 100
+```
+- **`len(data)`**: numero totale righe (17,317)
+- **Calcolo**: `(817 / 17317) * 100 = 4.72%` per `rain_1h`
+- **Output**: Series con percentuali
+
+**Righe 4-7: DataFrame Riepilogativo**
+```python
+missing_df = pd.DataFrame({
+    'Missing Count': missing,
+    'Percentage': missing_pct
+})
+```
+- **`pd.DataFrame({...})`**: crea DataFrame da dizionario
+- **Keys del dict** → nomi colonne
+- **Values del dict** → Series Pandas
+- **Index preservato**: nomi colonne del dataset originale
+
+**Struttura `missing_df`**:
+```
+              Missing Count  Percentage
+datetime                  0        0.00
+power_kw                  0        0.00
+temp                      0        0.00
+...
+rain_1h                 817        4.72
+```
+
+**Riga 8: Filtraggio e Ordinamento**
+```python
+missing_df = missing_df[missing_df['Missing Count'] > 0].sort_values('Missing Count', ascending=False)
+```
+- **Operazione composta**, scomponiamola:
+
+1. **`missing_df['Missing Count'] > 0`**:
+   - Crea Series booleana
+   - True per colonne con almeno 1 NaN
+   - False per colonne senza NaN
+
+2. **`missing_df[...]`**:
+   - Filtraggio booleano (boolean indexing)
+   - Mantiene solo righe dove condizione è True
+   - **Risultato**: Solo colonne con NaN
+
+3. **`.sort_values('Missing Count', ascending=False)`**:
+   - Ordina per colonna 'Missing Count'
+   - **`ascending=False`**: ordine decrescente (più NaN prima)
+
+**Output finale**:
+```
+         Missing Count  Percentage
+rain_1h            817        4.72
+```
+
+**Righe 10-14: Conditional Print**
+```python
+if len(missing_df) > 0:
+    print("Colonne con valori mancanti:")
+    print(missing_df)
+else:
+    print("Nessun valore mancante trovato!")
+```
+- **`len(missing_df)`**: numero righe nel DataFrame filtrato
+- **If `> 0`**: almeno una colonna ha NaN → stampa DataFrame
+- **Else**: dataset completo (caso ideale ma raro)
+
+**Perché questa analisi è critica**:
+1. **Machine Learning richiede dati completi**: molti algoritmi falliscono con NaN
+2. **Pattern di missing**:
+   - **MCAR** (Missing Completely At Random): sicuro ignorare/rimuovere
+   - **MAR** (Missing At Random): imputation con pattern
+   - **MNAR** (Missing Not At Random): bias se non gestiti
+3. **Decisione strategia**: imputation vs rimozione vs feature engineering
+
+---
+
+### Cella 9: Gestione Valori Mancanti
+
+```python
+1  print("Gestione valori mancanti...\n")
+2  
+3  # rain_1h: NaN = 0 (nessuna pioggia)
+4  if 'rain_1h' in data.columns:
+5      data['rain_1h'] = data['rain_1h'].fillna(0)
+6      print("✓ rain_1h: NaN sostituiti con 0")
+7  
+8  # Per le altre colonne numeriche: interpolazione lineare limitata
+9  numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+10 if 'power_kw' in numeric_cols:
+11     # Interpolazione lineare con limite di 3 valori consecutivi
+12     data['power_kw'] = data['power_kw'].interpolate(method='linear', limit=3)
+13     # Forward fill per eventuali gap rimanenti
+14     data['power_kw'] = data['power_kw'].fillna(method='ffill', limit=1)
+15     print("✓ power_kw: interpolazione lineare applicata")
+16 
+17 # Altre colonne meteo
+18 for col in numeric_cols:
+19     if col != 'power_kw' and data[col].isnull().sum() > 0:
+20         data[col] = data[col].interpolate(method='linear', limit=5)
+21         data[col] = data[col].fillna(method='ffill', limit=2)
+22         print(f"✓ {col}: interpolazione applicata")
+23 
+24 # Rimuovi righe con NaN rimanenti (se presenti)
+25 rows_before = len(data)
+26 data = data.dropna()
+27 rows_after = len(data)
+28 print(f"\nRighe rimosse: {rows_before - rows_after}")
+29 print(f"Dataset finale: {data.shape}")
+30 
+31 print("\n✓ Gestione valori mancanti completata!")
+```
+
+#### Spiegazione Dettagliata
+
+**Righe 3-6: Gestione Speciale `rain_1h`**
+```python
+if 'rain_1h' in data.columns:
+    data['rain_1h'] = data['rain_1h'].fillna(0)
+    print("✓ rain_1h: NaN sostituiti con 0")
+```
+
+**Ragionamento domain-specific**:
+- **Sensori pioggia**: NaN spesso significa "nessuna rilevazione" = 0 mm pioggia
+- **Alternative scartate**:
+  - Interpolazione: assurdo (pioggia non è continua)
+  - Rimozione righe: perderemmo ~5% dataset
+  - Media: distorce distribuzione (rain_1h è sparso: 0, 0, 0, 15, 0, 0...)
+- **`.fillna(0)`**: sostituisce tutti NaN con 0
+  - **In-place**: assegnazione necessaria (`data['rain_1h'] = ...`)
+  - Non usa `inplace=True` perché vogliamo riassegnare
+
+**Riga 9: Selezione Colonne Numeriche**
+```python
+numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+```
+- **`data.select_dtypes(include=[np.number])`**: 
+  - Seleziona solo colonne con dtype numerico
+  - **Inclusi**: int, float, uint, etc.
+  - **Esclusi**: datetime, string, object
+- **`.columns`**: Index con nomi colonne
+- **`.tolist()`**: converte Index in lista Python
+- **Output**: `['power_kw', 'temp', 'Dni', 'Ghi', 'humidity', 'clouds_all', 'wind_speed', 'pressure', 'rain_1h']`
+
+**Righe 10-15: Interpolazione Target (`power_kw`)**
+```python
+if 'power_kw' in numeric_cols:
+    data['power_kw'] = data['power_kw'].interpolate(method='linear', limit=3)
+    data['power_kw'] = data['power_kw'].fillna(method='ffill', limit=1)
+    print("✓ power_kw: interpolazione lineare applicata")
+```
+
+**Riga 12 - Interpolazione Lineare**:
+```python
+data['power_kw'].interpolate(method='linear', limit=3)
+```
+- **`method='linear'`**: interpolazione lineare tra valori adiacenti
+  - Formula: $y = y_1 + \frac{x - x_1}{x_2 - x_1}(y_2 - y_1)$
+  - Esempio:
+    ```
+    PRIMA:  10.5, NaN, NaN, 16.5
+    DOPO:   10.5, 12.5, 14.5, 16.5  (incrementi uguali di 2.0)
+    ```
+  
+- **`limit=3`**: massimo 3 NaN consecutivi interpolabili
+  - **Perché limite?**: Gap troppo lunghi → interpolazione inaffidabile
+  - Se 4+ NaN consecutivi → i primi 3 interpolati, il 4° rimane NaN
+
+**Alternative a `method='linear'`**:
+- `'time'`: considera timestamp (per dati irregolarmente spaziati)
+- `'polynomial'`: fit polinomiale (rischio overfitting)
+- `'spline'`: smooth, ma computazionalmente costoso
+- `'nearest'`: forward/backward fill (non smooth)
+
+**Riga 14 - Forward Fill Residuo**:
+```python
+data['power_kw'].fillna(method='ffill', limit=1)
+```
+- **`method='ffill'`**: "forward fill" = propaga ultimo valore valido
+  - Esempio:
+    ```
+    PRIMA:  10.5, 12.3, NaN, 15.7
+    DOPO:   10.5, 12.3, 12.3, 15.7  (12.3 propagato)
+    ```
+  
+- **`limit=1`**: propaga max 1 posizione avanti
+  - Evita propagazione eccessiva (es. valori notturni copiati al mattino)
+
+**Strategia combinata**:
+1. **Interpolazione lineare** (limit=3): riempie gap brevi con trend
+2. **Forward fill** (limit=1): gestisce NaN singoli rimanenti
+3. **Ordine importante**: interpolazione prima (più accurata)
+
+**Righe 17-22: Loop su Altre Feature Meteo**
+```python
+for col in numeric_cols:
+    if col != 'power_kw' and data[col].isnull().sum() > 0:
+        data[col] = data[col].interpolate(method='linear', limit=5)
+        data[col] = data[col].fillna(method='ffill', limit=2)
+        print(f"✓ {col}: interpolazione applicata")
+```
+
+**Differenze rispetto a `power_kw`**:
+- **`limit=5`** invece di 3: meteo cambia più gradualmente che produzione solare
+- **`limit=2`** (ffill) invece di 1: tolleranza maggiore per feature ausiliarie
+- **Condizione**: `col != 'power_kw'` per non processare due volte il target
+
+**Righe 24-29: Rimozione NaN Residui**
+```python
+rows_before = len(data)
+data = data.dropna()
+rows_after = len(data)
+print(f"\nRighe rimosse: {rows_before - rows_after}")
+print(f"Dataset finale: {data.shape}")
+```
+
+**Riga 26 - `dropna()`**:
+- **Comportamento default**: rimuove QUALSIASI riga con almeno 1 NaN
+- **Parametri opzionali** (non usati qui):
+  - `subset=['col1', 'col2']`: controlla solo certe colonne
+  - `how='all'`: rimuovi solo se TUTTI i valori sono NaN
+  - `thresh=5`: rimuovi se meno di 5 valori non-null
+- **Nel progetto**: Dopo interpolazione, NaN residui sono rari
+  - Tipicamente: 0-10 righe rimosse su 17k (≈0.05%)
+  - Righe problematiche: gap lunghi all'inizio/fine dataset
+
+**Output esempio**:
+```
+Righe rimosse: 3
+Dataset finale: (17314, 10)
+```
+
+**Riga 31: Conferma Completamento**
+```python
+print("\n✓ Gestione valori mancanti completata!")
+```
+- Checkmark ✓ indica successo operazione
+- Dataset ora pronto per feature engineering
+
+---
+
+### Riepilogo Strategia Missing Values
+
+| Colonna | Tipo NaN | Strategia | Motivazione |
+|---------|----------|-----------|-------------|
+| `rain_1h` | ~5% | Fill con 0 | NaN = sensore non rileva = no pioggia |
+| `power_kw` | <1% | Interpolazione lineare (limit=3) + ffill (limit=1) | Target critico, preserva trend |
+| Feature meteo | <1% | Interpolazione lineare (limit=5) + ffill (limit=2) | Cambiamenti graduali, tolleranza maggiore |
+| NaN residui | <0.1% | Rimozione righe | Gap troppo lunghi, dati inaffidabili |
+
+**Vantaggi approccio**:
+1. ✅ **Domain-aware**: usa conoscenza del dominio (pioggia, solare)
+2. ✅ **Conservativo**: limiti su interpolazione prevengono artefatti
+3. ✅ **Graduale**: 3 strategie in cascata (fill → interpolate → drop)
+4. ✅ **Preserva dati**: minimal data loss (~0.1%)
+5. ✅ **No bias**: interpolazione lineare non introduce pattern falsi
+
+---
+
+## Sezione 4: Feature Engineering
+
+Feature Engineering è il processo di creare nuove variabili (feature) dai dati grezzi per migliorare le performance del modello. In time series forecasting, le feature temporali sono cruciali per catturare pattern ciclici.
+
+### Cella 10: Creazione Feature Temporali e Ottimizzazione Memoria
+
+```python
+1  print("Feature Engineering...\n")
+2  
+3  # Feature temporali
+4  data['hour'] = data['datetime'].dt.hour
+5  data['day_of_month'] = data['datetime'].dt.day
+6  data['month'] = data['datetime'].dt.month
+7  data['day_of_week'] = data['datetime'].dt.dayofweek
+8  
+9  print("✓ Feature temporali create: hour, day_of_month, month, day_of_week")
+10 
+11 # Group ID (necessario per TFT)
+12 data['group_id'] = 'PV1'
+13 print("✓ group_id creato: 'PV1'")
+14 
+15 # Time index (indice temporale incrementale) - DEVE essere intero
+16 data['time_idx'] = np.arange(len(data)).astype(int)
+17 print("✓ time_idx creato: 0 to", len(data)-1)
+18 
+19 # Converti tutte le colonne numeriche in float32 (ECCETTO time_idx che deve rimanere int)
+20 numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+21 for col in numeric_cols:
+22     if col != 'time_idx':  # Non convertire time_idx
+23         data[col] = data[col].astype(np.float32)
+24 
+25 print(f"✓ {len(numeric_cols)-1} colonne numeriche convertite in float32")
+26 print(f"✓ time_idx mantenuto come {data['time_idx'].dtype}")
+27 
+28 print("\n" + "="*50)
+29 print("DATASET FINALE")
+30 print("="*50)
+31 print(f"Shape: {data.shape}")
+32 print(f"\nColonne: {data.columns.tolist()}")
+33 print(f"\nPrime righe:")
+34 print(data.head())
+```
+
+#### Spiegazione Dettagliata
+
+---
+
+### **Parte 1: Feature Temporali (Righe 3-9)**
+
+#### **Riga 4: Ora del Giorno (Hour)**
+```python
+data['hour'] = data['datetime'].dt.hour
+```
+
+**Scomposizione**:
+- **`data['datetime']`**: Series Pandas con dtype `datetime64[ns]`
+- **`.dt`**: accessor per operazioni datetime-specific
+  - Simile a `.str` per stringhe
+  - Disponibile solo su Series datetime
+- **`.hour`**: estrae l'ora (0-23) come intero
+
+**Output**:
+```python
+# Input: datetime
+2010-07-01 00:00:00  →  0
+2010-07-01 01:00:00  →  1
+2010-07-01 13:30:00  →  13
+2010-07-01 23:45:00  →  23
+```
+
+**Perché è importante per PV forecasting**:
+1. **Pattern giornaliero**: Produzione zero di notte (0-6, 20-23), picco a mezzogiorno (12-14)
+2. **Ciclicità**: 24 ore = ciclo completo
+3. **Stagionalità oraria**: Alba/tramonto variano con stagione
+   - Estate: produzione 6:00-20:00 (14 ore)
+   - Inverno: produzione 8:00-17:00 (9 ore)
+
+**Alternativa avanzata non usata** (codifica ciclica):
+```python
+# Preserva ciclicità: ora 23 e ora 0 sono vicine
+data['hour_sin'] = np.sin(2 * np.pi * data['hour'] / 24)
+data['hour_cos'] = np.cos(2 * np.pi * data['hour'] / 24)
+```
+- **Pro**: Rappresentazione matematica corretta della ciclicità
+- **Contro**: TFT gestisce embedding, non necessario qui
+
+---
+
+#### **Riga 5: Giorno del Mese**
+```python
+data['day_of_month'] = data['datetime'].dt.day
+```
+
+**Output**:
+```python
+# Input: datetime
+2010-07-01  →  1
+2010-07-15  →  15
+2010-07-31  →  31
+2010-08-01  →  1
+```
+
+**Perché meno importante**:
+- ❌ **No pattern forte**: giorno 1 vs 15 vs 31 non ha significato fisico per PV
+- ⚠️ **Confusione potenziale**: diversi mesi hanno giorni diversi (28-31)
+- ✅ **Potrebbe catturare**: pattern di manutenzione mensile (es. pulizia pannelli ogni 1° del mese)
+
+**Alternativa migliore** (non usata):
+```python
+data['day_of_year'] = data['datetime'].dt.dayofyear  # 1-365
+```
+- Cattura meglio la posizione nell'anno solare
+- Utile per stagionalità solare (angolo sole, durata giorno)
+
+---
+
+#### **Riga 6: Mese dell'Anno**
+```python
+data['month'] = data['datetime'].dt.month
+```
+
+**Output**:
+```python
+# Input: datetime
+2010-01-15  →  1  (Gennaio)
+2010-06-15  →  6  (Giugno)
+2010-12-15  →  12 (Dicembre)
+```
+
+**Perché è MOLTO importante**:
+1. **Stagionalità solare**:
+   - Estate (Giu-Ago): Alta produzione, lunghe giornate
+   - Inverno (Dic-Feb): Bassa produzione, corte giornate
+2. **Angolo di incidenza solare**:
+   - Estate: Sole alto → massima irradiazione
+   - Inverno: Sole basso → irradiazione ridotta
+3. **Pattern meteo stagionale**:
+   - Estate: Più sole, meno nuvole
+   - Inverno: Più nuvole, possibile neve
+
+**Distribuzione produzione per mese** (esempio):
+```
+Gen: 15 kW media
+Feb: 20 kW
+Mar: 30 kW
+Apr: 40 kW
+Mag: 48 kW
+Giu: 52 kW ← Picco
+Lug: 50 kW
+Ago: 48 kW
+Set: 38 kW
+Ott: 28 kW
+Nov: 18 kW
+Dic: 12 kW ← Minimo
+```
+
+---
+
+#### **Riga 7: Giorno della Settimana**
+```python
+data['day_of_week'] = data['datetime'].dt.dayofweek
+```
+
+**Output**:
+```python
+# Input: datetime
+2010-07-05 (Lunedì)    →  0
+2010-07-06 (Martedì)   →  1
+...
+2010-07-10 (Sabato)    →  5
+2010-07-11 (Domenica)  →  6
+```
+
+**Convenzione Pandas**:
+- `0 = Lunedì`
+- `6 = Domenica`
+- Alternativa: `.dt.day_name()` → "Monday", "Tuesday", etc. (string)
+
+**Perché per PV forecasting**:
+- ❓ **Utilità discutibile**: Produzione solare NON dipende dal giorno settimanale
+- ✅ **Possibile rilevanza**:
+  - Consumo energia: Weekend vs Weekday (se predici net load)
+  - Manutenzione: Operazioni programmate il weekend
+  - Cloud patterns: Meteorologia locale con pattern settimanale (raro)
+- 🎯 **Nel progetto**: Probabilmente bassa importanza (come visto in interpretability)
+
+---
+
+### **Parte 2: Group ID per TFT (Righe 11-13)**
+
+#### **Riga 12: Creazione Group ID**
+```python
+data['group_id'] = 'PV1'
+```
+
+**Cos'è Group ID**:
+- **Scopo**: Identificatore univoco per ogni serie temporale nel dataset
+- **Tipo**: String (o categorico)
+- **Nel progetto**: Un solo impianto → un solo gruppo `'PV1'`
+
+**Quando servono multiple group_id**:
+```python
+# Esempio: Multiple impianti fotovoltaici
+data_impianto1['group_id'] = 'PV_Plant_A'
+data_impianto2['group_id'] = 'PV_Plant_B'
+data_impianto3['group_id'] = 'PV_Plant_C'
+
+data_combined = pd.concat([data_impianto1, data_impianto2, data_impianto3])
+
+# TFT impara pattern comuni + specifici per gruppo
+```
+
+**Perché TFT richiede group_id**:
+1. **Normalizzazione per gruppo**:
+   ```python
+   target_normalizer=GroupNormalizer(groups=["group_id"])
+   ```
+   - Ogni gruppo normalizzato separatamente
+   - Evita bias se gruppi hanno scale diverse
+
+2. **Embedding categorie**:
+   - TFT crea embedding per `group_id`
+   - Cattura caratteristiche specifiche del gruppo
+   - Es: orientamento pannelli, ombreggiamento, efficienza
+
+3. **Batch sampling**:
+   - PyTorch Forecasting campiona batch per gruppo
+   - Garantisce rappresentatività di ogni serie temporale
+
+**Nel nostro caso** (singolo gruppo):
+- Group ID è costante → embedding zero-information
+- Normalizzazione funziona comunque (un solo gruppo da normalizzare)
+- **Obbligatorio**: TFT crash senza group_id, anche se singolo
+
+---
+
+### **Parte 3: Time Index (Righe 15-17)**
+
+#### **Riga 16: Creazione Time Index**
+```python
+data['time_idx'] = np.arange(len(data)).astype(int)
+```
+
+**Scomposizione**:
+1. **`np.arange(len(data))`**:
+   - Crea array NumPy: `[0, 1, 2, 3, ..., 17316]`
+   - `len(data) = 17317` → array da 0 a 17316
+   - **Tipo default**: int64 su sistemi 64-bit
+
+2. **`.astype(int)`**:
+   - Conversione esplicita a intero Python
+   - **Necessaria**: garantisce dtype intero, non float
+
+**Output**:
+```python
+datetime             time_idx
+2010-07-01 00:00        0
+2010-07-01 01:00        1
+2010-07-01 02:00        2
+...
+2012-06-30 23:00    17316
+```
+
+**Perché time_idx è CRITICO**:
+
+1. **Ordinamento temporale**:
+   - TFT usa `time_idx` per ordinare sequenze
+   - DEVE essere incrementale senza gap
+   - DEVE essere intero (no float, no datetime)
+
+2. **Windowing automatico**:
+   - TimeSeriesDataSet usa `time_idx` per creare finestre
+   - Esempio: `max_encoder_length=168`
+     - Campione 1: time_idx 0-167 (encoder) + 168-191 (decoder)
+     - Campione 2: time_idx 1-168 (encoder) + 169-192 (decoder)
+     - etc.
+
+3. **Relative Time Encoding**:
+   ```python
+   add_relative_time_idx=True  # In TimeSeriesDataSet
+   ```
+   - Crea feature: `(time_idx - time_idx_start_sequence) / max_encoder_length`
+   - Normalizza posizione temporale dentro la finestra
+   - Valore: 0.0 (inizio encoder) → 1.0 (fine decoder)
+
+**❌ Errori comuni**:
+```python
+# SBAGLIATO: Float invece di int
+data['time_idx'] = np.arange(len(data)).astype(float)  
+# → Error: "time_idx must be of integer type"
+
+# SBAGLIATO: Gap nella sequenza
+data = data[data['power_kw'] > 0]  # Rimuove notti
+data['time_idx'] = np.arange(len(data))  # Crea gap temporali!
+# → Modello non capisce che ci sono 12 ore di salto
+
+# SBAGLIATO: Non ordinato
+data = data.sample(frac=1)  # Shuffle random
+data['time_idx'] = np.arange(len(data))
+# → time_idx non corrisponde all'ordine temporale reale
+```
+
+**✅ Corretto** (come nel progetto):
+```python
+data = data.sort_values('datetime').reset_index(drop=True)  # Ordina prima
+data['time_idx'] = np.arange(len(data)).astype(int)  # Poi crea time_idx
+```
+
+---
+
+### **Parte 4: Ottimizzazione Memoria (Righe 19-26)**
+
+#### **Righe 19-23: Conversione a float32**
+```python
+numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+for col in numeric_cols:
+    if col != 'time_idx':  # Non convertire time_idx
+        data[col] = data[col].astype(np.float32)
+```
+
+**Riga 20: Selezione Colonne Numeriche**
+```python
+numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+```
+- Seleziona colonne con dtype numerico (float64, int64, etc.)
+- **Output**: `['power_kw', 'temp', 'Dni', 'Ghi', ..., 'hour', 'month', 'time_idx']`
+- **Esclude**: `'datetime'` (datetime64), `'group_id'` (object/string)
+
+**Riga 22: Condizione Esclusione time_idx**
+```python
+if col != 'time_idx':
+```
+- **Perché escludere**:
+  - `time_idx` DEVE rimanere `int` (int64)
+  - TimeSeriesDataSet fa type checking: `assert time_idx.dtype in [int32, int64]`
+  - Conversione a float32 causerebbe errore
+
+**Riga 23: Conversione dtype**
+```python
+data[col] = data[col].astype(np.float32)
+```
+- **Da**: float64 (8 bytes per valore)
+- **A**: float32 (4 bytes per valore)
+- **Risparmio**: 50% memoria per colonne numeriche
+
+**Calcolo risparmio memoria**:
+```python
+# Prima conversione
+9 colonne × 17317 righe × 8 bytes (float64) = 1.25 MB
+
+# Dopo conversione
+9 colonne × 17317 righe × 4 bytes (float32) = 0.62 MB
+
+Risparmio: 0.63 MB (50%)
+```
+
+**Perché float32 invece di float64**:
+
+1. **Memoria GPU limitata**:
+   - RTX 4060 ha 8 GB VRAM
+   - Batch training: tensori replicati per batch_size × seq_length
+   - Esempio: batch=64, seq=192, features=13
+     - float64: 64 × 192 × 13 × 8 = 12.8 MB per batch
+     - float32: 64 × 192 × 13 × 4 = 6.4 MB per batch
+   - Con gradienti, optimizer state, etc. → risparmio significativo
+
+2. **Performance GPU**:
+   - GPU moderne ottimizzate per float32 (FP32)
+   - Tensor Cores su RTX: mixed precision (FP16/FP32)
+   - float64 (FP64) più lento e meno supportato
+
+3. **Precisione sufficiente**:
+   - float32: 7 cifre decimali significative
+   - Per `power_kw` (0-58 kW): precisione ~0.00001 kW
+   - **Più che sufficiente** per forecasting (errori sensore >> precisione float)
+
+**Trade-off float32 vs float64**:
+| Aspetto | float32 | float64 |
+|---------|---------|---------|
+| Memoria | 4 bytes | 8 bytes |
+| Precisione | ~7 cifre | ~15 cifre |
+| Range | ±3.4×10³⁸ | ±1.7×10³⁰⁸ |
+| Velocità GPU | Veloce | Più lento |
+| Use case | Deep Learning, forecasting | Calcolo scientifico ad alta precisione |
+
+**⚠️ Quando NON usare float32**:
+- Calcoli finanziari (arrotondamenti critici)
+- Simulazioni fisiche ad alta precisione
+- Operazioni con numeri molto grandi/piccoli (rischio underflow/overflow)
+
+**Nel nostro progetto**:
+- ✅ float32 è **perfetto**
+- Dati PV: range 0-58 kW, precisione sensori ±1%
+- Guadagno 50% memoria senza loss di informazione
+
+---
+
+#### **Righe 25-26: Conferma Conversioni**
+```python
+print(f"✓ {len(numeric_cols)-1} colonne numeriche convertite in float32")
+print(f"✓ time_idx mantenuto come {data['time_idx'].dtype}")
+```
+
+**Output**:
+```
+✓ 12 colonne numeriche convertite in float32
+✓ time_idx mantenuto come int64
+```
+
+**Verifica dtype**:
+```python
+print(data.dtypes)
+
+# Output atteso:
+datetime               datetime64[ns]
+power_kw                     float32
+temp                         float32
+...
+hour                         float32
+month                        float32
+time_idx                       int64  ← Intero preservato!
+group_id                      object
+```
+
+---
+
+### **Parte 5: Summary Dataset Finale (Righe 28-34)**
+
+#### **Righe 28-34: Print Riepilogo**
+```python
+print("\n" + "="*50)
+print("DATASET FINALE")
+print("="*50)
+print(f"Shape: {data.shape}")
+print(f"\nColonne: {data.columns.tolist()}")
+print(f"\nPrime righe:")
+print(data.head())
+```
+
+**Output esempio**:
+```
+==================================================
+DATASET FINALE
+==================================================
+Shape: (17314, 15)
+
+Colonne: ['datetime', 'power_kw', 'temp', 'Dni', 'Ghi', 'humidity', 
+         'clouds_all', 'wind_speed', 'pressure', 'rain_1h', 'hour', 
+         'day_of_month', 'month', 'day_of_week', 'group_id', 'time_idx']
+
+Prime righe:
+             datetime  power_kw   temp    Dni  ...  group_id  time_idx
+0 2010-07-01 00:00:00      0.00  18.50    0.0  ...       PV1         0
+1 2010-07-01 01:00:00      0.00  18.20    0.0  ...       PV1         1
+2 2010-07-01 02:00:00      0.00  18.00    0.0  ...       PV1         2
+3 2010-07-01 03:00:00      0.00  17.80    0.0  ...       PV1         3
+4 2010-07-01 04:00:00      0.00  17.50    0.0  ...       PV1         4
+```
+
+**Analisi shape**:
+- **Righe**: 17,314 (da 17,317 originali)
+  - 3 righe rimosse: NaN residui dopo interpolazione
+- **Colonne**: 15 (da 10 originali)
+  - +4 feature temporali: `hour`, `day_of_month`, `month`, `day_of_week`
+  - +1 group_id: `'PV1'`
+  - +1 time_idx: `0` to `17313`
+
+---
+
+### **Riepilogo Feature Engineering**
+
+| Feature | Tipo | Range | Utilità PV | Importanza |
+|---------|------|-------|------------|------------|
+| `hour` | int (float32) | 0-23 | ⭐⭐⭐⭐⭐ Pattern giornaliero | ALTA |
+| `month` | int (float32) | 1-12 | ⭐⭐⭐⭐⭐ Stagionalità | ALTA |
+| `day_of_week` | int (float32) | 0-6 | ⭐ Debolmente rilevante | BASSA |
+| `day_of_month` | int (float32) | 1-31 | ⭐ Poco rilevante | BASSA |
+| `time_idx` | int64 | 0-17313 | ⭐⭐⭐⭐⭐ Obbligatorio TFT | CRITICA |
+| `group_id` | string | 'PV1' | ⭐⭐⭐⭐⭐ Obbligatorio TFT | CRITICA |
+
+**Pattern catturati**:
+1. ✅ **Ciclicità giornaliera** (`hour`): Zero notte, picco mezzogiorno
+2. ✅ **Stagionalità annuale** (`month`): Estate alta, inverno bassa
+3. ✅ **Sequenzialità temporale** (`time_idx`): Ordine cronologico
+4. ⚠️ **Ciclicità settimanale** (`day_of_week`): Probabilmente irrilevante per PV
+
+**Ottimizzazioni applicate**:
+1. ✅ **Memoria**: float32 invece di float64 (-50%)
+2. ✅ **Tipo corretto**: time_idx come int64 (requirement TFT)
+3. ✅ **Completezza**: Nessun NaN rimanente
+4. ✅ **Ordinamento**: Cronologico per time_idx
+
+**Dataset pronto per**: TimeSeriesDataSet creation → TFT Training
+
+---
+
+### Cella 11: Visualizzazione Serie Temporale e Statistiche Finali
+
+```python
+1  # Visualizzazione della serie temporale target
+2  fig, axes = plt.subplots(2, 1, figsize=(15, 8))
+3  
+4  # Serie completa
+5  axes[0].plot(data['datetime'], data['power_kw'], linewidth=0.5, alpha=0.7)
+6  axes[0].set_title('Serie Temporale Completa - Produzione Fotovoltaica', fontsize=14, fontweight='bold')
+7  axes[0].set_xlabel('Data', fontsize=12)
+8  axes[0].set_ylabel('Potenza (kW)', fontsize=12)
+9  axes[0].grid(True, alpha=0.3)
+10 
+11 # Zoom su una settimana
+12 sample_start = len(data) // 2
+13 sample_end = sample_start + 168  # 1 settimana
+14 axes[1].plot(data['datetime'].iloc[sample_start:sample_end], 
+15              data['power_kw'].iloc[sample_start:sample_end], 
+16              linewidth=1.5, marker='o', markersize=3)
+17 axes[1].set_title('Zoom - Una Settimana di Dati', fontsize=14, fontweight='bold')
+18 axes[1].set_xlabel('Data', fontsize=12)
+19 axes[1].set_ylabel('Potenza (kW)', fontsize=12)
+20 axes[1].grid(True, alpha=0.3)
+21 axes[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
+22 plt.setp(axes[1].xaxis.get_majorticklabels(), rotation=45, ha='right')
+23 
+24 plt.tight_layout()
+25 plt.show()
+26 
+27 print(f"\nStatistiche produzione:")
+28 print(f"Media: {data['power_kw'].mean():.2f} kW")
+29 print(f"Max: {data['power_kw'].max():.2f} kW")
+30 print(f"Min: {data['power_kw'].min():.2f} kW")
+31 print(f"Std: {data['power_kw'].std():.2f} kW")
+```
+
+#### Spiegazione Dettagliata
+
+---
+
+### **Parte 1: Setup Figure Matplotlib (Riga 2)**
+
+#### **Riga 2: Creazione Subplots**
+```python
+fig, axes = plt.subplots(2, 1, figsize=(15, 8))
+```
+
+**Scomposizione**:
+- **`plt.subplots(2, 1)`**: Crea griglia 2 righe × 1 colonna di subplot
+  - `2`: numero righe (subplots verticali)
+  - `1`: numero colonne
+  - **Output**: 2 grafici impilati verticalmente
+
+- **`figsize=(15, 8)`**: Dimensione figura in pollici
+  - Larghezza: 15 pollici (≈38 cm)
+  - Altezza: 8 pollici (≈20 cm)
+  - **Ratio**: 15:8 ≈ 1.875:1 (landscape)
+
+**Return values**:
+```python
+fig    # Figure object: contenitore principale
+axes   # Array NumPy con 2 Axes objects: [axes[0], axes[1]]
+```
+
+**Struttura creata**:
+```
+┌─────────────────────────────────┐
+│  axes[0]  (plot completo)       │
+│                                 │
+├─────────────────────────────────┤
+│  axes[1]  (zoom settimana)      │
+│                                 │
+└─────────────────────────────────┘
+```
+
+**Perché 2 subplot**:
+1. **axes[0]**: Overview completa (2 anni) → pattern stagionali
+2. **axes[1]**: Dettaglio settimanale → pattern giornalieri
+
+**Alternativa con layout diverso**:
+```python
+# Subplots affiancati (side-by-side)
+fig, axes = plt.subplots(1, 2, figsize=(18, 6))  # 1 riga, 2 colonne
+```
+
+---
+
+### **Parte 2: Plot Serie Completa (Righe 4-9)**
+
+#### **Riga 5: Plot Linea Serie Temporale**
+```python
+axes[0].plot(data['datetime'], data['power_kw'], linewidth=0.5, alpha=0.7)
+```
+
+**Parametri**:
+1. **`data['datetime']`** (asse X):
+   - Pandas Series con 17,314 timestamp
+   - Range: `2010-07-01 00:00` → `2012-06-30 23:00`
+   - Matplotlib gestisce automaticamente datetime
+
+2. **`data['power_kw']`** (asse Y):
+   - Pandas Series con 17,314 valori float32
+   - Range: 0.0 - 58.07 kW
+
+3. **`linewidth=0.5`**:
+   - Spessore linea: 0.5 punti (molto sottile)
+   - **Perché sottile**: 17k punti → linea spessa appare blob
+   - Default: 1.5 (troppo per alta densità dati)
+
+4. **`alpha=0.7`**:
+   - Trasparenza: 70% opaco (30% trasparente)
+   - Range: 0.0 (trasparente) → 1.0 (opaco)
+   - **Perché 0.7**: Linee sovrapposte visibili, pattern chiari
+
+**Effetto visivo**:
+```
+Con linewidth=0.5, alpha=0.7:
+- Pattern stagionali visibili (estate alta, inverno bassa)
+- Ciclicità giornaliera distinguibile (onde dense)
+- Non appare troppo "pesante" o scuro
+
+Con linewidth=2.0, alpha=1.0:
+- Troppo spesso → blob nero indistinguibile
+- Pattern giornalieri nascosti
+```
+
+**Output grafico atteso**:
+```
+60 kW ┤        ╱╲╱╲╱╲╱╲╱╲        ╱╲╱╲╱╲╱╲╱╲
+      │      ╱          ╲      ╱          ╲
+40 kW ┤    ╱              ╲  ╱              ╲
+      │  ╱                  ╲                  ╲
+20 kW ┤╱                      ╲              ╱  ╲
+      │                         ╲          ╱      ╲
+ 0 kW ┼──────────────────────────╲────────╱────────
+      2010-07         2011-01         2011-07
+      
+      ↑ Estate: picchi alti (50+ kW)
+      ↓ Inverno: picchi bassi (20 kW)
+```
+
+---
+
+#### **Righe 6-9: Formattazione Axes[0]**
+
+**Riga 6: Titolo Grafico**
+```python
+axes[0].set_title('Serie Temporale Completa - Produzione Fotovoltaica', fontsize=14, fontweight='bold')
+```
+- **`fontsize=14`**: Dimensione font (default: 12)
+- **`fontweight='bold'`**: Grassetto per evidenza
+- **Valori alternativi**: `'normal'`, `'light'`, `'heavy'`, `100-900`
+
+**Riga 7-8: Etichette Assi**
+```python
+axes[0].set_xlabel('Data', fontsize=12)
+axes[0].set_ylabel('Potenza (kW)', fontsize=12)
+```
+- **xlabel**: Asse orizzontale (tempo)
+- **ylabel**: Asse verticale (potenza)
+- **Unità di misura**: `(kW)` esplicita per chiarezza
+
+**Riga 9: Griglia**
+```python
+axes[0].grid(True, alpha=0.3)
+```
+- **`True`**: Abilita griglia
+- **`alpha=0.3`**: Trasparenza 30% (griglia leggera, non invadente)
+- **Default**: Griglia su major ticks (automatici)
+
+**Effetto griglia**:
+```
+Con alpha=0.3:
+│   │   │   │   │   │   <- Linee verticali leggere
+────┼───┼───┼───┼───┼───  <- Linee orizzontali leggere
+    │   │   │   │   │
+
+Con alpha=1.0:
+│   │   │   │   │   │   <- Troppo marcate, distraggono
+━━━━┿━━━┿━━━┿━━━┿━━━┿━━━  
+    │   │   │   │   │
+```
+
+---
+
+### **Parte 3: Zoom Settimanale (Righe 11-22)**
+
+#### **Righe 12-13: Selezione Finestra Temporale**
+```python
+sample_start = len(data) // 2
+sample_end = sample_start + 168  # 1 settimana
+```
+
+**Riga 12: Calcolo Punto Medio**
+```python
+sample_start = len(data) // 2
+```
+- **`len(data)`**: 17,314 righe
+- **`// 2`**: Divisione intera (floor division)
+  - `17314 // 2 = 8657`
+- **Perché metà dataset**: Rappresentativo (evita inizio/fine anomali)
+
+**Riga 13: Finestra 168 Ore**
+```python
+sample_end = sample_start + 168
+```
+- **168 ore** = 7 giorni × 24 ore/giorno
+- **Range campione**: indici `8657` → `8825`
+- **Corrisponde a**: metà Gennaio 2011 (circa)
+
+**Verifica timestamp**:
+```python
+# Calcolo temporale
+2010-07-01 + (8657 ore) = 2010-07-01 + 360.7 giorni = 2011-06-26 circa
+# Finestra: 2011-06-26 → 2011-07-03 (1 settimana)
+```
+
+**Perché 168 ore (1 settimana)**:
+1. **Pattern giornalieri**: 7 cicli completi alba-tramonto
+2. **Pattern settimanali**: Eventuale differenza weekend/weekday
+3. **Leggibilità**: Abbastanza zoom per vedere dettagli
+4. **Coerenza**: Stessa lunghezza dell'encoder TFT (`max_encoder_length=168`)
+
+---
+
+#### **Righe 14-16: Plot Dettaglio**
+```python
+axes[1].plot(data['datetime'].iloc[sample_start:sample_end], 
+             data['power_kw'].iloc[sample_start:sample_end], 
+             linewidth=1.5, marker='o', markersize=3)
+```
+
+**Riga 14-15: Slicing con .iloc**
+```python
+data['datetime'].iloc[sample_start:sample_end]  # Slicing basato su indice posizionale
+```
+- **`.iloc[]`**: Index-based selection (posizione numerica)
+- **`[8657:8825]`**: 168 righe (sample_start a sample_end)
+- **Alternativa**: `.loc[]` per label-based selection
+
+**Differenza iloc vs loc**:
+```python
+# iloc: posizione numerica
+data.iloc[0:3]      # Prime 3 righe (indici 0, 1, 2)
+
+# loc: label-based
+data.loc['2010-07-01':'2010-07-03']  # Range per etichette (se index è datetime)
+```
+
+**Riga 16: Parametri Plot Dettaglio**
+- **`linewidth=1.5`**: Più spesso di axes[0] (0.5)
+  - Motivo: Meno punti (168 vs 17k) → linea più spessa leggibile
+  
+- **`marker='o'`**: Marker circolare su ogni punto
+  - Visualizza ogni ora come punto distinto
+  - Utile per identificare singole misurazioni
+
+- **`markersize=3`**: Diametro marker in punti
+  - `3` = piccolo ma visibile
+  - Default: `6` (troppo grande per 168 punti)
+
+**Effetto visivo markers**:
+```
+Con marker='o', markersize=3:
+     ●───●───●───●───●───●    ← Ciclo giorno (0→max→0)
+   ●               ●       ●
+ ●                   ●       ●
+●                       ●      ● ← Notte (0 kW)
+
+Senza markers:
+     ─────────────────────    ← Linea continua
+   ╱                     ╲
+ ╱                         ╲
+────────────────────────────
+```
+
+---
+
+#### **Righe 17-20: Formattazione Axes[1]**
+```python
+axes[1].set_title('Zoom - Una Settimana di Dati', fontsize=14, fontweight='bold')
+axes[1].set_xlabel('Data', fontsize=12)
+axes[1].set_ylabel('Potenza (kW)', fontsize=12)
+axes[1].grid(True, alpha=0.3)
+```
+- Stesse impostazioni di axes[0]
+- Titolo diverso: "Zoom - Una Settimana"
+- Griglia per leggibilità dettaglio orario
+
+---
+
+#### **Righe 21-22: Formattazione Date Asse X**
+
+**Riga 21: Formatter Date**
+```python
+axes[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
+```
+
+**Scomposizione**:
+1. **`axes[1].xaxis`**: Oggetto XAxis del subplot 1
+2. **`set_major_formatter()`**: Imposta formato major ticks
+3. **`mdates.DateFormatter()`**: Formatter matplotlib per date
+   - **Classe**: `matplotlib.dates.DateFormatter`
+   - **Import**: `from matplotlib import dates as mdates` (Cella 1)
+
+**Pattern formato**: `'%Y-%m-%d %H:%M'`
+| Codice | Significato | Esempio |
+|--------|-------------|---------|
+| `%Y` | Anno (4 cifre) | 2011 |
+| `%m` | Mese (01-12) | 06 |
+| `%d` | Giorno (01-31) | 26 |
+| `%H` | Ora (00-23) | 14 |
+| `%M` | Minuto (00-59) | 30 |
+
+**Output esempio**:
+```
+Prima formattazione (default):
+|────────|────────|────────|────────|
+Jun 26   Jun 27   Jun 28   Jun 29
+
+Dopo formattazione:
+|──────────────|──────────────|──────────────|
+2011-06-26 00:00  2011-06-27 00:00  2011-06-28 00:00
+```
+
+**Perché formato esteso**:
+- **Precisione**: Ora esatta visibile (importante per PV)
+- **Chiarezza**: Anno-mese-giorno eliminano ambiguità
+- **Internazionale**: ISO 8601 standard (non ambiguo come MM/DD vs DD/MM)
+
+**Riga 22: Rotazione Etichette**
+```python
+plt.setp(axes[1].xaxis.get_majorticklabels(), rotation=45, ha='right')
+```
+
+**Scomposizione**:
+1. **`plt.setp()`**: Set property su lista oggetti matplotlib
+   - **Funzione**: `plt.setp(objects, **properties)`
+   - **Equivalente a**: Loop su `.set_property()` per ogni oggetto
+
+2. **`axes[1].xaxis.get_majorticklabels()`**: Lista Text objects delle etichette
+   - Return: `[Text(0, 0, '2011-06-26 00:00'), Text(...), ...]`
+
+3. **`rotation=45`**: Rotazione 45° antiorario
+   - Previene sovrapposizione etichette lunghe
+   - Angolo ottimale: 30-45° (leggibile ma compatto)
+
+4. **`ha='right'`**: Horizontal alignment = 'right'
+   - Allinea estremità destra etichetta con tick mark
+   - **Valori**: `'left'`, `'center'`, `'right'`
+
+**Effetto rotazione**:
+```
+Senza rotazione (rotation=0):
+2011-06-26 00:002011-06-27 00:002011-06-28 00:00  ← Sovrapposto!
+|           |           |           |
+
+Con rotation=45, ha='right':
+           2011-06-26 00:00
+                    |
+                           2011-06-27 00:00
+                                    |
+                                           2011-06-28 00:00
+                                                    |
+```
+
+**Alternative non usate**:
+```python
+# Rotazione verticale (troppo stretta)
+plt.setp(..., rotation=90, ha='right')
+
+# Formato auto date (meno controllo)
+fig.autofmt_xdate(rotation=45, ha='right')  # Applica a tutti subplot
+```
+
+---
+
+### **Parte 4: Layout e Display (Righe 24-25)**
+
+#### **Riga 24: Layout Automatico**
+```python
+plt.tight_layout()
+```
+
+**Funzione**: Regola automaticamente padding tra subplot per evitare sovrapposizioni
+
+**Cosa aggiusta**:
+1. **Spaziatura tra subplot**: Evita sovrapposizione titoli/assi
+2. **Margini figura**: Ottimizza spazio bianco esterno
+3. **Etichette lunghe**: Accomoda tick labels ruotate
+
+**Prima di tight_layout()**:
+```
+┌─────────────────────────────────┐
+│  Title axes[0]                  │
+│  [PLOT]                         │
+│  X-Label                        │ ← Troppo vicino a title axes[1]
+├─────────────────────────────────┤
+│  Title axes[1]                  │ ← Sovrapposizione!
+│  [PLOT]                         │
+│  2011-06-26 00:00               │ ← Etichetta tagliata
+└─────────────────────────────────┘
+```
+
+**Dopo tight_layout()**:
+```
+┌─────────────────────────────────┐
+│  Title axes[0]                  │
+│  [PLOT]                         │
+│  X-Label                        │
+│                                 │ ← Spaziatura aggiunta
+├─────────────────────────────────┤
+│  Title axes[1]                  │
+│  [PLOT]                         │
+│           2011-06-26 00:00      │ ← Visibile completamente
+│                                 │
+└─────────────────────────────────┘
+```
+
+**Parametri opzionali** (non usati qui):
+```python
+plt.tight_layout(pad=1.5)    # Padding extra
+plt.tight_layout(h_pad=2.0)  # Padding verticale tra subplot
+plt.tight_layout(w_pad=2.0)  # Padding orizzontale
+```
+
+---
+
+#### **Riga 25: Render Figura**
+```python
+plt.show()
+```
+
+**Funzione**: Renderizza e mostra la figura in modalità interattiva (Jupyter) o finestra (script)
+
+**Comportamento in Jupyter Notebook**:
+- Display inline sotto la cella
+- Formato PNG/SVG (settabile con `%config InlineBackend.figure_format`)
+- Non blocca esecuzione (matplotlib inline backend)
+
+**Comportamento in script Python**:
+```python
+# Script .py eseguito da terminale
+plt.show()  # Apre finestra GUI (TkAgg, Qt5Agg, etc.)
+            # BLOCCA esecuzione fino a chiusura finestra
+```
+
+**Alternative**:
+```python
+# Salva su file invece di mostrare
+plt.savefig('produzione_pv.png', dpi=300, bbox_inches='tight')
+plt.close()  # Libera memoria
+
+# Mostra E salva
+plt.savefig('produzione_pv.png')
+plt.show()
+```
+
+---
+
+### **Parte 5: Statistiche Descrittive (Righe 27-31)**
+
+#### **Righe 28-31: Print Statistiche**
+```python
+print(f"\nStatistiche produzione:")
+print(f"Media: {data['power_kw'].mean():.2f} kW")
+print(f"Max: {data['power_kw'].max():.2f} kW")
+print(f"Min: {data['power_kw'].min():.2f} kW")
+print(f"Std: {data['power_kw'].std():.2f} kW")
+```
+
+**Riga 28: Newline Header**
+```python
+print(f"\nStatistiche produzione:")
+```
+- **`\n`**: Newline per separazione visiva dal plot
+- **`:` finale**: Introduce lista statistiche
+
+**Riga 29: Media (Mean)**
+```python
+print(f"Media: {data['power_kw'].mean():.2f} kW")
+```
+- **`data['power_kw'].mean()`**: Media aritmetica Pandas
+  - Formula: $\mu = \frac{1}{n}\sum_{i=1}^{n} x_i$
+  - Calcolo: $(0 + 0 + ... + 35.2 + ... + 0) / 17314$
+
+- **`.2f`**: Format specifier
+  - `.2`: 2 decimali di precisione
+  - `f`: Fixed-point notation (non scientifica)
+
+**Output atteso**: `Media: 16.73 kW`
+
+**Interpretazione**:
+- **16.73 kW** su max 58 kW → **28.8% del picco**
+- Bassa media perché:
+  1. Produzione zero 12+ ore/giorno (notte)
+  2. Produzione parziale alba/tramonto
+  3. Variabilità stagionale (inverno molto basso)
+
+**Media vs Mediana** (non calcolata):
+```python
+# Mediana probabilmente diversa
+data['power_kw'].median()  # ~10 kW (ipotesi)
+# Media > Mediana → distribuzione skewed right
+```
+
+---
+
+**Riga 30: Massimo (Max)**
+```python
+print(f"Max: {data['power_kw'].max():.2f} kW")
+```
+- **Calcolo**: $\max(x_1, x_2, ..., x_n)$
+- **Output atteso**: `Max: 58.07 kW` (già visto in data analysis)
+
+**Interpretazione fisica**:
+- **58.07 kW** = Picco assoluto in 2 anni
+- Probabilmente: mezzogiorno estivo, cielo limpido, temperatura ottimale
+- **Capacità nominale impianto**: Probabilmente ~60 kWp (kilowatt peak)
+- **Performance ratio**: $58.07 / 60 = 96.8\%$ (ottimo!)
+
+---
+
+**Riga 31: Minimo (Min)**
+```python
+print(f"Min: {data['power_kw'].min():.2f} kW")
+```
+- **Output atteso**: `Min: 0.00 kW`
+
+**Interpretazione**:
+- **0.00 kW** = Nessuna produzione (notte)
+- Presente in ~50% dei timestamp (12 ore/giorno × 730 giorni)
+- **Non anomalo**: comportamento normale impianti PV
+
+---
+
+**Riga 32: Deviazione Standard (Std)**
+```python
+print(f"Std: {data['power_kw'].std():.2f} kW")
+```
+- **Calcolo**: $\sigma = \sqrt{\frac{1}{n}\sum_{i=1}^{n}(x_i - \mu)^2}$
+- **Pandas**: `ddof=1` (degrees of freedom = 1, sample std)
+- **Output atteso**: `Std: 18.45 kW` (ipotesi)
+
+**Interpretazione**:
+```python
+# Se Media = 16.73 kW, Std = 18.45 kW
+Coefficiente di Variazione = Std / Media = 18.45 / 16.73 = 110%
+```
+
+- **CV > 100%** → **Altissima variabilità**!
+- **Cause**:
+  1. Alternanza giorno/notte (0 → 58 → 0)
+  2. Variabilità stagionale (inverno: 0-20 kW, estate: 0-58 kW)
+  3. Condizioni meteo (nuvole: -50% produzione)
+
+**Distribuzione probabilmente bimodale**:
+```
+Frequenza
+│     ╱╲              ╱╲
+│    ╱  ╲            ╱  ╲
+│   ╱    ╲          ╱    ╲
+│  ╱      ╲        ╱      ╲
+│ ╱        ╲      ╱        ╲
+└──────────────────────────── Potenza (kW)
+  0       10  20  30  40  50
+  ↑                      ↑
+Notte                 Giorno picco
+(~50% campioni)      (~5% campioni)
+```
+
+---
+
+### **Riepilogo Visualizzazione**
+
+**Obiettivi della cella**:
+1. ✅ **Overview completa**: 2 anni di dati (pattern stagionali)
+2. ✅ **Dettaglio temporale**: 1 settimana (pattern giornalieri)
+3. ✅ **Statistiche riassuntive**: Media, max, min, std
+
+**Tecniche matplotlib utilizzate**:
+| Tecnica | Scopo | Parametri Chiave |
+|---------|-------|------------------|
+| `subplots(2,1)` | Layout verticale | 2 grafici impilati |
+| `linewidth=0.5` | Linea sottile | Alta densità dati (17k) |
+| `alpha=0.7` | Trasparenza | Sovrapposizioni visibili |
+| `marker='o'` | Punti dati | Distinguere misurazioni orarie |
+| `DateFormatter` | Date leggibili | ISO 8601 con ora |
+| `rotation=45` | Etichette ruotate | Evita sovrapposizione |
+| `tight_layout()` | Spaziatura auto | No sovrapposizioni subplot |
+
+**Insight dai grafici**:
+1. **Stagionalità**: Evidente nel plot completo (onde lunghe)
+2. **Ciclicità giornaliera**: Chiarissima nello zoom settimanale
+3. **Variabilità giornaliera**: Alcuni giorni nuvoli (picco ridotto)
+4. **Notti zero**: Pattern regolare 0 kW notturno
+
+**Preparazione per modellazione**:
+- Pattern temporali confermati → feature temporali (hour, month) utili
+- Alta variabilità → normalizzazione necessaria
+- Ciclicità regolare → encoder_length=168 cattura 7 cicli completi
+
+**Dataset pronto per**: Configurazione TimeSeriesDataSet (prossima sezione)
+
+---
+
+## Sezione 5: Pre-processing per TFT (TimeSeriesDataSet)
+
+Configurazione dei parametri TFT e della strategia di cross-validation temporale per evitare data leakage.
+
+### Cella 12: Definizione Parametri TFT
+
+```python
+# Parametri TFT - Fissi per tutto il tuning
+MAX_ENCODER_LENGTH = 168  # 1 settimana di contesto
+MAX_PREDICTION_LENGTH = 24  # Previsione 24 ore
+```
+
+**Parametri architettura TFT**:
+
+| Parametro | Valore | Significato |
+|-----------|--------|-------------|
+| `MAX_ENCODER_LENGTH` | 168 | Lunghezza storico (1 settimana = 168 ore) |
+| `MAX_PREDICTION_LENGTH` | 24 | Orizzonte previsione (1 giorno = 24 ore) |
+
+**Perché 168 ore (encoder)**:
+1. **7 cicli giornalieri completi**: Cattura pattern settimanali
+2. **Memoria LSTM sufficiente**: Sequenze troppo lunghe → gradient vanishing
+3. **Bilanciamento**: Troppo corto (24h) → info insufficiente; troppo lungo (720h/1 mese) → overfitting
+
+**Perché 24 ore (decoder)**:
+- **Requisito task**: Previsione giorno successivo (day-ahead forecasting)
+- **Pianificazione energetica**: Operatori grid necessitano previsioni 24h
+- **Bilanciamento errore/utilità**: 24h = utile ma gestibile (vs 168h = alta incertezza)
+
+**Architettura TFT**:
+```
+Input: 168 timesteps passati (t-167 → t)
+       ↓
+    ENCODER (LSTM + Attention)
+       ↓
+    DECODER (autoregressive)
+       ↓
+Output: 24 timesteps futuri (t+1 → t+24)
+```
+
+---
+
+### Cella 13: Temporal Cross-Validation Setup
+
+```python
+def setup_temporal_cross_validation(data, n_folds=5, val_ratio=0.2):
+    """Temporal Cross-Validation con fold bilanciati per evitare data leakage"""
+    
+    max_time_idx = data['time_idx'].max()
+    total_samples = len(data)
+    val_size = int(total_samples * val_ratio)  # Validation fisso 20%
+    
+    # Training size cresce progressivamente
+    min_train_size = int(total_samples * 0.5)  # Minimo 50%
+    max_train_size = total_samples - val_size
+    
+    folds = []
+    for fold in range(n_folds):
+        progress = fold / (n_folds - 1) if n_folds > 1 else 0
+        train_size = int(min_train_size + progress * (max_train_size - min_train_size))
+        
+        # Calcola cutoff temporali
+        train_cutoff = train_size - 1
+        val_start = train_cutoff + 1
+        val_cutoff = val_start + val_size - 1
+        
+        # Filtra dati per questo fold
+        train_data = data[data['time_idx'] <= train_cutoff].copy()
+        val_data = data[(data['time_idx'] >= val_start) & 
+                        (data['time_idx'] <= val_cutoff)].copy()
+        
+        folds.append((train_data, val_data))
+    
+    return folds
+
+folds = setup_temporal_cross_validation(data, n_folds=5, val_ratio=0.2)
+```
+
+**Strategia Temporal Cross-Validation**:
+
+**❌ K-Fold Standard (SBAGLIATO per time series)**:
+```
+Fold 1: Train [A,C,D,E] | Val [B]  ← Usa dati futuri per predire passato!
+Fold 2: Train [B,C,D,E] | Val [A]  ← Data leakage
+```
+
+**✅ Temporal Cross-Validation (CORRETTO)**:
+```
+Fold 1: Train [────50%────] | Val [─20%─]
+Fold 2: Train [──────60%──────] | Val [─20%─]
+Fold 3: Train [────────70%────────] | Val [─20%─]
+Fold 4: Train [──────────80%──────────] | Val [─20%─]
+Fold 5: Train [────────────90%────────────] | Val [─20%─]
+        ▲ Training cresce, validation fisso alla fine
+```
+
+**Componenti chiave**:
+1. **Validation size fisso**: 20% del dataset (sempre alla fine temporale)
+2. **Training size crescente**: Da 50% a 90% del dataset
+3. **No overlap temporale**: Train sempre prima di validation (no data leakage)
+4. **Skip fold invalidi**: Se train/val troppo piccoli per encoder+decoder
+
+**Output esempio**:
+```
+Fold 1/5:
+  Training: 8657 samples (50.0%)
+  Validation: 3463 samples (20.0%)
+  Train range: 2010-07-01 to 2011-06-26
+  Val range: 2011-06-27 to 2012-01-24
+
+Fold 5/5:
+  Training: 13851 samples (80.0%)
+  Validation: 3463 samples (20.0%)
+  Train range: 2010-07-01 to 2012-01-24
+  Val range: 2012-01-25 to 2012-06-30
+```
+
+---
+
+### Cella 14: Hyperparameter Search Space
+
+```python
+def suggest_hyperparameters(trial):
+    """Definisce lo spazio di ricerca degli iperparametri per Optuna"""
+    hyperparams = {
+        # Architettura
+        'hidden_size': trial.suggest_categorical('hidden_size', [64, 128, 192, 256]),
+        'lstm_layers': trial.suggest_int('lstm_layers', 1, 3),
+        'attention_head_size': trial.suggest_categorical('attention_head_size', [1, 2, 4, 8]),
+        'hidden_continuous_size': trial.suggest_categorical('hidden_continuous_size', [8, 16, 32]),
+        
+        # Regolarizzazione
+        'dropout': trial.suggest_float('dropout', 0.1, 0.4),
+        
+        # Training
+        'learning_rate': trial.suggest_float('learning_rate', 1e-4, 1e-1, log=True),
+        'batch_size': trial.suggest_categorical('batch_size', [32, 64, 128]),
+        'patience': trial.suggest_int('patience', 10, 30),
+        'gradient_clip_val': trial.suggest_float('gradient_clip_val', 0.1, 2.0),
+    }
+    return hyperparams
+```
+
+**Spazio di ricerca iperparametri**:
+
+| Categoria | Parametro | Range | Tipo | Effetto |
+|-----------|-----------|-------|------|---------|
+| **Architettura** | `hidden_size` | [64, 128, 192, 256] | Categorical | Capacità modello |
+| | `lstm_layers` | [1, 2, 3] | Integer | Profondità LSTM |
+| | `attention_head_size` | [1, 2, 4, 8] | Categorical | Multi-head attention |
+| | `hidden_continuous_size` | [8, 16, 32] | Categorical | Embedding continui |
+| **Regolarizzazione** | `dropout` | [0.1, 0.4] | Float | Prevenzione overfitting |
+| **Optimization** | `learning_rate` | [1e-4, 1e-1] | Float (log) | Velocità convergenza |
+| | `batch_size` | [32, 64, 128] | Categorical | Memoria/stabilità |
+| | `patience` | [10, 30] | Integer | Early stopping |
+| | `gradient_clip_val` | [0.1, 2.0] | Float | Stabilità training |
+
+**Note tecniche**:
+- **`log=True` per learning_rate**: Campionamento logaritmico (esplora meglio ordini di grandezza)
+- **Categorical vs Int**: Categorical per valori non ordinali o con gap irregolari
+- **hidden_size**: Potenza di 2 non obbligatoria (192 incluso per granularità)
+
+---
+
+### Cella 15-17: Objective Function con Cross-Validation
+
+```python
+def objective(trial):
+    """Funzione obiettivo per Optuna con temporal cross-validation"""
+    
+    # Feature conosciute (known_reals)
+    known_reals = ["time_idx", "hour", "day_of_month", "month", "day_of_week"]
+    
+    # Suggerisci iperparametri
+    hyperparams = suggest_hyperparameters(trial)
+    
+    fold_losses = []
+    
+    # Loop attraverso tutti i fold
+    for fold_idx, (train_data, val_data) in enumerate(folds):
+        
+        # Crea TimeSeriesDataSet
+        training_dataset = TimeSeriesDataSet(
+            train_data,
+            time_idx="time_idx",
+            target="power_kw",
+            group_ids=["group_id"],
+            min_encoder_length=MAX_ENCODER_LENGTH,
+            max_encoder_length=MAX_ENCODER_LENGTH,
+            min_prediction_length=MAX_PREDICTION_LENGTH,
+            max_prediction_length=MAX_PREDICTION_LENGTH,
+            static_categoricals=["group_id"],
+            time_varying_known_reals=known_reals,
+            time_varying_unknown_reals=["power_kw"],
+            target_normalizer=GroupNormalizer(groups=["group_id"]),
+            add_relative_time_idx=True,
+            add_target_scales=True,
+            add_encoder_length=True,
+        )
+        
+        # Validation dataset da training
+        validation_dataset = TimeSeriesDataSet.from_dataset(
+            training_dataset, 
+            pd.concat([train_data, val_data]),
+            predict=True
+        )
+        
+        # DataLoaders
+        train_dataloader = training_dataset.to_dataloader(
+            train=True, batch_size=hyperparams['batch_size'], num_workers=0
+        )
+        val_dataloader = validation_dataset.to_dataloader(
+            train=False, batch_size=hyperparams['batch_size']*2, num_workers=0
+        )
+        
+        # Crea modello TFT
+        tft = TemporalFusionTransformer.from_dataset(
+            training_dataset,
+            learning_rate=hyperparams['learning_rate'],
+            hidden_size=hyperparams['hidden_size'],
+            lstm_layers=hyperparams['lstm_layers'],
+            attention_head_size=hyperparams['attention_head_size'],
+            dropout=hyperparams['dropout'],
+            hidden_continuous_size=hyperparams['hidden_continuous_size'],
+            output_size=7,  # Quantile loss (7 quantili)
+            loss=QuantileLoss(),
+        )
+        
+        # Training con Early Stopping
+        early_stop = EarlyStopping(
+            monitor="val_loss", patience=hyperparams['patience']//2, mode="min"
+        )
+        
+        trainer = pl.Trainer(
+            max_epochs=30,
+            accelerator="auto",
+            gradient_clip_val=hyperparams['gradient_clip_val'],
+            callbacks=[early_stop],
+            logger=False,
+            enable_progress_bar=False,
+        )
+        
+        trainer.fit(tft, train_dataloader, val_dataloader)
+        
+        # Salva validation loss
+        fold_val_loss = trainer.callback_metrics.get("val_loss").item()
+        fold_losses.append(fold_val_loss)
+        
+        # Cleanup memoria
+        del tft, trainer, training_dataset, validation_dataset
+        torch.cuda.empty_cache()
+        gc.collect()
+    
+    # Restituisci media loss su tutti i fold
+    mean_val_loss = np.mean(fold_losses)
+    return mean_val_loss
+```
+
+**Componenti TimeSeriesDataSet**:
+
+| Parametro | Valore | Scopo |
+|-----------|--------|-------|
+| `time_idx` | "time_idx" | Indice temporale (0-17313) |
+| `target` | "power_kw" | Variabile da prevedere |
+| `group_ids` | ["group_id"] | Identificatore serie ('PV1') |
+| `time_varying_known_reals` | [time_idx, hour, month, ...] | Feature note in futuro |
+| `time_varying_unknown_reals` | ["power_kw"] | Feature ignote in futuro (solo target) |
+| `target_normalizer` | GroupNormalizer | Normalizza per gruppo (z-score) |
+| `add_relative_time_idx` | True | Posizione relativa in finestra (0→1) |
+| `add_target_scales` | True | Media/std target per decoder |
+| `add_encoder_length` | True | Lunghezza encoder come feature |
+
+**Known vs Unknown**:
+- **Known reals** (time_varying_known_reals): Feature disponibili anche in futuro
+  - `time_idx`: Sempre noto (incrementale)
+  - `hour`, `month`, etc.: Calendario noto in anticipo
+  
+- **Unknown reals** (time_varying_unknown_reals): Feature ignote in futuro
+  - `power_kw`: Target da prevedere (non conosciuto!)
+  - Weather features (temp, Dni, etc.): NON usate perché non disponibili in produzione
+
+**Normalizzazione GroupNormalizer**:
+```python
+# Formula: z-score per gruppo
+normalized_value = (value - group_mean) / group_std
+
+# Nel nostro caso (1 gruppo):
+group_mean = data['power_kw'].mean()  # ~16.73 kW
+group_std = data['power_kw'].std()    # ~18.45 kW
+```
+
+**from_dataset per validation**:
+- **Eredita configurazione**: Stesso normalizer, stesso encoding
+- **predict=True**: Genera sample per prediction (no teacher forcing)
+- **Concatena train+val**: Necessario per avere contesto encoder anche per primi sample validation
+
+**Pipeline completo per fold**:
+```
+1. TimeSeriesDataSet (train) → Configura normalizzazione
+2. TimeSeriesDataSet.from_dataset (val) → Usa stessa normalizzazione
+3. DataLoaders → Batch di sequenze [batch, seq, features]
+4. TFT.from_dataset() → Inizializza architettura da dataset
+5. Trainer.fit() → Training con early stopping
+6. Estrai val_loss → Metrica per Optuna
+7. Cleanup GPU → Libera memoria per fold successivo
+```
+
+**Output cross-validation**:
+```
+Fold 1 Val Loss: 0.125634
+Fold 2 Val Loss: 0.118923
+Fold 3 Val Loss: 0.121456
+Fold 4 Val Loss: 0.119832
+Fold 5 Val Loss: 0.122108
+
+Mean Val Loss: 0.121591 (±0.002341)
+```
+
+**Optuna utilizza**: `mean_val_loss` per confrontare trial e trovare migliori iperparametri.
+
+---
+
 ## Prossimi Passi
 
 Le prossime sezioni del notebook coprono:
-- **Sezione 3 (Celle 7-9)**: Data Analysis & Missing Values
-- **Sezione 4 (Celle 10-11)**: Feature Engineering
-- **Sezione 5 (Celle 12-14)**: TimeSeriesDataSet Configuration
-
-**Vuoi che continui con le celle 7-9?**
+- **Sezione 6 (Cella 18)**: Optuna Study Execution
+- **Sezione 7 (Cella 19-23)**: Best Hyperparameters & Final Training
+- **Sezione 8 (Cella 24-27)**: Evaluation & Visualization
 
