@@ -1,24 +1,45 @@
 {
     "best_model_path": "final_best_model\\best_tft_model.ckpt",
     "hyperparameters": {
-        "hidden_size": 64,
-        "lstm_layers": 3,
-        "attention_head_size": 1,
-        "hidden_continuous_size": 16,
-        "dropout": 0.36616382277289805,
-        "learning_rate": 0.0026100256506134765,
+        "hidden_size": 128,
+        "lstm_layers": 1,
+        "attention_head_size": 4,
+        "hidden_continuous_size": 32,
+        "dropout": 0.34973279224012654,
+        "learning_rate": 0.00022948683681130568,
         "batch_size": 128,
-        "patience": 21,
-        "gradient_clip_val": 1.5648376419136658
+        "patience": 16,
+        "gradient_clip_val": 1.097037220101252
     },
     "training_samples": 13853,
     "validation_samples": 3464,
     "encoder_length": 168,
     "prediction_length": 24,
     "known_reals": [
-        "time_idx"
+        "time_idx",
+        "hour_sin",
+        "hour_cos",
+        "day_sin",
+        "day_cos",
+        "month_sin",
+        "month_cos"
     ],
-    "timestamp": "2025-12-04 23:56:24",
-    "optuna_best_trial": 4,
-    "optuna_best_loss": 2.08613862991333
+    "time_varying_unknown_reals": [
+        "power_kw",
+        "temp",
+        "pressure",
+        "humidity",
+        "clouds_all",
+        "wind_speed",
+        "rain_1h",
+        "wind_sin",
+        "wind_cos",
+        "Ghi",
+        "Dni",
+        "Dhi"
+    ],
+    "MAX_POWER": 68.91999999999999,
+    "timestamp": "2025-12-05 19:36:37",
+    "optuna_best_trial": 0,
+    "optuna_best_cv_loss": 0.019354938343167306
 }

@@ -2,14 +2,16 @@
 # Requirements for 24-Hour Ahead Power Forecasting
 
 # Core libraries
-pandas>=1.5.0
-numpy>=1.23.0
+pandas>=1.5.0,<2.3.0
+numpy>=1.26.0,<2.0.0  # Use pre-built wheels for Python 3.13+
 matplotlib>=3.6.0
 seaborn>=0.12.0
 
-# Deep Learning
-torch>=2.0.0
-pytorch-lightning>=2.0.0
+# Deep Learning - IMPORTANT: Version compatibility
+# Using PyTorch 2.6+ requires specific Lightning versions
+# We use the latest available compatible versions
+torch==2.6.0
+lightning==2.4.0
 pytorch-forecasting>=1.0.0
 
 # Data processing

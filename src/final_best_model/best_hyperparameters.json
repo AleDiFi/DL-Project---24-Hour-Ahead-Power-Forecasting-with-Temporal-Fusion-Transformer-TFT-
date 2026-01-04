@@ -1,11 +1,11 @@
 {
-    "hidden_size": 64,
-    "lstm_layers": 3,
-    "attention_head_size": 1,
-    "hidden_continuous_size": 16,
-    "dropout": 0.36616382277289805,
-    "learning_rate": 0.0026100256506134765,
+    "hidden_size": 128,
+    "lstm_layers": 1,
+    "attention_head_size": 4,
+    "hidden_continuous_size": 32,
+    "dropout": 0.34973279224012654,
+    "learning_rate": 0.00022948683681130568,
     "batch_size": 128,
-    "patience": 21,
-    "gradient_clip_val": 1.5648376419136658
+    "patience": 16,
+    "gradient_clip_val": 1.097037220101252
 }

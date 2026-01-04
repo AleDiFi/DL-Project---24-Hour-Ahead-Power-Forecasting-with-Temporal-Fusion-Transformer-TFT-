@@ -1,0 +1,88 @@
+================================================================================
+TEMPORAL FUSION TRANSFORMER - TRAINING REPORT
+Photovoltaic Power Forecasting (24h ahead)
+================================================================================
+Generated on: 2025-12-05 19:36:38
+
+HYPERPARAMETER TUNING RESULTS:
+----------------------------------------
+Total trials: 5
+Completed trials: 5
+Best trial: #0
+Best CV validation loss: 0.019355
+
+OPTIMAL HYPERPARAMETERS:
+----------------------------------------
+  hidden_size: 128
+  lstm_layers: 1
+  attention_head_size: 4
+  hidden_continuous_size: 32
+  dropout: 0.34973279224012654
+  learning_rate: 0.00022948683681130568
+  batch_size: 128
+  patience: 16
+  gradient_clip_val: 1.097037220101252
+
+DATASET INFORMATION:
+----------------------------------------
+Training samples: 13,853
+Validation samples: 3,464
+Total samples: 17,317
+Encoder length: 168 hours (1 week)
+Prediction length: 24 hours (1 day)
+Train range: 2010-07-01 00:00:00 to 2012-02-07 05:00:00
+Val range: 2012-02-07 06:00:00 to 2012-06-30 13:00:00
+
+FEATURE CONFIGURATION:
+----------------------------------------
+Static categoricals: ['group_id']
+Known reals (7):
+  - time_idx
+  - hour_sin
+  - hour_cos
+  - day_sin
+  - day_cos
+  - month_sin
+  - month_cos
+Unknown reals (12):
+  - power_kw
+  - temp
+  - pressure
+  - humidity
+  - clouds_all
+  - wind_speed
+  - rain_1h
+  - wind_sin
+  - wind_cos
+  - Ghi
+  - Dni
+  - Dhi
+
+SCALING INFORMATION:
+----------------------------------------
+MAX_POWER (for inverse scaling): 68.92 kW
+Target (power_kw): Scaled to [0, 1] by dividing by MAX_POWER
+Cyclical features: hour, day, month (sin/cos encoded)
+Wind: speed (log1p), direction (sin/cos)
+Rain: log1p transformed
+Meteo: temp, pressure (standardized), Ghi/Dni/Dhi (scaled 0-1)
+
+FINAL MODEL PERFORMANCE (Real kW):
+----------------------------------------
+MAE:   1.904162 kW
+RMSE:  3.182439 kW
+MAPE:  191081612.9659%
+R²:    0.958846
+Val Loss: 0.013008
+
+Note: All metrics calculated on Real kW values after inverse scaling
+
+MODEL FILES:
+----------------------------------------
+Model checkpoint: final_best_model\best_tft_model.ckpt
+Hyperparameters: final_best_model\best_hyperparameters.json
+Model info: final_best_model\model_info.json
+
+================================================================================
+Training completed successfully!
+================================================================================
